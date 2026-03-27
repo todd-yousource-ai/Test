@@ -51,6 +51,13 @@
   safely implemented internally.
 - pyyaml must remain in requirements.txt — required for CI workflow YAML validation (FM-6).
 
+## Test Co-location Rules
+- Unit tests ship in the same PR as the implementation they test — never in a separate testing PR.
+- Test files mirror the src/ layout: src/foo/bar.py -> tests/foo/test_bar.py.
+- Tests and implementation evolve together in the same fix loop session.
+- Exception: integration tests that validate multiple merged components belong in a
+  dedicated PR after all dependencies have merged, validated by CI only (not local test runner).
+
 ## Observability and Auditability
 - All critical actions must be observable through structured logs, metrics, and telemetry.
 - Logs must support forensic reconstruction without exposing secrets.
