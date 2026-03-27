@@ -6,55 +6,63 @@
 
 ### File and Directory Naming
 
-1. Place all validation source modules under `src/vtz/` using lowercase snake_case filenames: e.g., `src/vtz/validator.py`, `src/vtz/rules.py`, `src/vtz/exceptions.py`.
-2. Place all validation tests under `tests/vtz/` mirroring the source layout: each source file `src/vtz/<component>.py` must have a corresponding `tests/vtz/test_<component>.py`.
-3. Never use hyphens, camelCase, or uppercase characters in file or directory names.
-4. The package root `src/vtz/__init__.py` must re-export every public validator class and function so consumers can import directly from `vtz` without knowing internal module structure (per FR-20 pattern).
+1. Place all validation source modules under `src/vtz/` following the pattern `src/vtz/<component>.py`.
+2. Place all validation tests under `tests/vtz/` following the pattern `tests/vtz/test_<component>.py`. Every source module in `src/vtz/` must have a corresponding test file.
+3. Use lowercase_snake_case for all file names. No hyphens, no camelCase (e.g., `field_validator.py`, not `fieldValidator.py` or `field-validator.py`).
+4. The package root `src/vtz/__init__.py` must re-export every public validator class and function so consumers can import directly from `vtz` without knowing the internal module structure (mirrors FR-20 pattern).
+5. Name modules after the single responsibility they own (e.g., `status_validator.py`, `schema_rules.py`, `constraint_checks.py`). Do not create catch-all modules named `utils.py` or `helpers.py`.
+
+---
 
 ### Class and Function Naming
 
-5. Name all classes in PascalCase: `FieldValidator`, `SchemaRule`, `ValidationResult`.
-6. Name all functions and methods in lowercase snake_case: `validate_field`, `check_required`, `apply_rules`.
-7. Prefix private/internal helpers with a single underscore: `_coerce_type`, `_normalize_value`.
-8. Name validator classes with the suffix `Validator` (e.g., `StatusValidator`, `TaskFieldValidator`).
-9. Name rule classes or functions with the suffix `Rule` or prefix `check_` (e.g., `NonEmptyRule`, `check_status_enum`).
-10. Name exception classes with the suffix `Error` (e.g., `ValidationError`, `FieldRequiredError`).
+6. Use PascalCase for all class names. Validator classes must end with the suffix `Validator` (e.g., `TaskFieldValidator`, `StatusTransitionValidator`).
+7. Use lowercase_snake_case for all function and method names (e.g., `validate_status`, `check_required_fields`).
+8. Public validation entry-point methods must be named `validate` or prefixed with `validate_` (e.g., `validate`, `validate_status`, `validate_constraints`).
+9. Private helper methods must be prefixed with a single underscore (e.g., `_check_length`, `_coerce_type`).
+10. Constants must be UPPER_SNAKE_CASE and defined at module level (e.g., `MAX_TITLE_LENGTH = 256`).
+
+---
 
 ### Error and Exception Patterns
 
-11. Define all validation exceptions in a single module: `src/vtz/exceptions.py`.
-12. Create a base exception `ValidationError(Exception)` from which every other validation exception inherits.
-13. Every `ValidationError` instance must carry at least two attributes: `field` (the name of the invalid field, as `str`) and `reason` (a human-readable explanation, as `str`).
-14. Never raise bare `Exception`, `ValueError`, or `TypeError` from validation logic — always raise a `ValidationError` subclass.
-15. Raise `FieldRequiredError(ValidationError)` when a mandatory field is missing or `None`.
-16. Raise `InvalidStatusError(ValidationError)` when a status value is not a member of the status enumeration (see rule 24).
-17. Never use string formatting with user-supplied data in exception messages without explicit conversion (`str()`); never embed tracebacks in returned error payloads.
+11. Define a base exception class `ValidationError` in `src/vtz/exceptions.py`. All validation-specific exceptions must inherit from it.
+12. Create granular exception subclasses for distinct failure categories (e.g., `FieldRequiredError`, `InvalidStatusError`, `ConstraintViolationError`), all inheriting from `ValidationError`.
+13. Every raised exception must include a human-readable message that names the field and the violated rule. Example: `FieldRequiredError("Field 'title' is required and was None")`.
+14. Never use bare `raise Exception(...)`. Always raise a `ValidationError` subclass.
+15. Validators must not silently swallow exceptions. If a validator catches an exception internally for control flow, it must re-raise a `ValidationError` subclass or propagate the original.
+16. Aggregate validation: when a validator checks multiple fields, collect all errors into a list and raise a single `ValidationError` whose `errors` attribute contains every individual violation, rather than failing on the first error.
+
+---
 
 ### Import and Module Organisation
 
-18. Use only the Python standard library. Zero external dependencies are permitted (NFR-1).
-19. All modules must be importable without side effects. Module-level code must contain only class definitions, function definitions, constant assignments, and imports — no I/O, no network calls, no mutable global state initialisation (NFR-2).
-20. Order imports in three groups separated by a blank line: (a) standard library, (b) other project-internal packages, (c) intra-package (relative) imports.
-21. Use relative imports within the `vtz` package (e.g., `from .exceptions import ValidationError`).
-22. Use absolute imports when referencing other subsystems (e.g., `from tasklib import Task`).
-23. Never use wildcard imports (`from module import *`) in any file except `__init__.py` re-exports.
+17. Use only the Python standard library. Zero external dependencies are permitted (NFR-1).
+18. Order imports in three groups separated by a blank line: (1) standard library, (2) project-internal packages, (3) intra-subsystem relative imports. Sort alphabetically within each group.
+19. Use absolute imports for cross-subsystem references (e.g., `from src.tasklib.status import TaskStatus`). Use relative imports only within the `vtz` package itself (e.g., `from .exceptions import ValidationError`).
+20. All modules must be importable without side effects. No code may execute at import time beyond class definitions, function definitions, and constant assignments (NFR-2).
+21. The `src/vtz/__init__.py` file must contain only re-exports and must not contain validation logic.
+
+---
 
 ### Comment and Documentation Rules
 
-24. Every public class and every public function/method must have a docstring (NFR-3). Use imperative mood in the first line: `"""Validate that the status field is a member of TaskStatus."""`
-25. Docstrings must follow the pattern: one-line summary, blank line, then `Args:`, `Returns:`, and `Raises:` sections where applicable.
-26. Inline comments (`#`) explain *why*, not *what*. Do not restate the code in English.
-27. Mark all TODO items with the format `# TODO(<owner>): <description>` — never leave anonymous TODOs.
-28. Do not place commented-out code in any committed file.
+22. Every public class must have a docstring describing its purpose, the fields or inputs it validates, and the exceptions it may raise (NFR-3).
+23. Every public function and method must have a docstring with a one-line summary, an `Args:` section listing each parameter and its type, a `Returns:` section, and a `Raises:` section listing every `ValidationError` subclass it can raise.
+24. Use inline comments only to explain *why*, never to restate *what* the code does.
+25. Mark intentional design decisions or trade-offs with a `# DESIGN:` prefix comment.
+26. Mark known limitations or future work with `# TODO(<author>):` followed by a tracker reference or one-line description.
+
+---
 
 ### Validation-Specific Patterns
 
-29. Reference status values exclusively through the status enumeration (e.g., `TaskStatus.PENDING`). Magic strings such as `"pending"` or `"done"` are forbidden anywhere in validation logic (NFR-4).
-30. Implement every discrete validation check as a standalone, pure function or single-responsibility class that receives the value under test and returns a `ValidationResult` or raises a `ValidationError`. Do not bundle unrelated checks.
-31. Define a `ValidationResult` dataclass (or named tuple) with at minimum: `is_valid: bool`, `errors: list[ValidationError]`. All validators must return this type rather than bare booleans.
-32. Compose validators using a `ValidationPipeline` (or equivalent) that accepts an ordered sequence of validator callables, runs them in order, and aggregates all `ValidationError` instances into a single `ValidationResult`. Fail-fast behaviour must be opt-in, not the default.
-33. Every validator function must be idempotent and free of side effects — calling it twice with the same input must produce the same result and must not mutate the input.
-34. Never silently coerce or modify input data inside a validator. If coercion is needed, perform it in a separate, explicit transformation step before validation.
-35. Validate at system boundaries only (API entry points, deserialization, store writes). Do not scatter ad-hoc validation checks across business-logic layers.
-36. Unit tests for each validator must cover at minimum: (a) a valid input, (b) each distinct invalid-input branch, (c) `None` / missing-field handling, and (d) boundary values where applicable.
-37. Parametrize repetitive test cases using `pytest.mark.parametrize` rather than duplicating test functions.
+27. Reference status values exclusively through the status enumeration (e.g., `TaskStatus.OPEN`). Magic strings such as `"open"` or `"completed"` are forbidden anywhere in validation code (NFR-4).
+28. Every validator must be a class that implements a `validate(self, data) -> None` interface. A successful validation returns `None`; a failed validation raises a `ValidationError` subclass.
+29. Validators must be stateless. Configuration (e.g., allowed statuses, field constraints) must be injected via the constructor, not hard-coded in methods.
+30. Compose complex validation by chaining validators through a `CompositeValidator` class that accepts an ordered list of validators and runs each in sequence, aggregating all `ValidationError` results.
+31. Define validation rules as data when possible. For example, required-field checks should be driven by a list of field names, not by a separate `if` block per field.
+32. Status transition validation must use an explicit adjacency mapping (e.g., `dict[TaskStatus, set[TaskStatus]]`) to define legal transitions. No implicit or hard-coded if/elif chains.
+33. Validators must never mutate the input data. If normalization (e.g., stripping whitespace) is needed, perform it in a separate transformation step before validation.
+34. Every validator class must be unit-testable in isolation. It must not depend on a database, network, or file system. Test files must cover: (a) valid input passes silently, (b) each distinct violation raises the correct exception subclass, and (c) aggregate mode collects all errors.
+35. When validating enumerated values, compare against the enum members programmatically (e.g., `value in TaskStatus`) rather than maintaining a separate allowlist that could drift from the enum definition.
