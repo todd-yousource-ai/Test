@@ -1,109 +1,64 @@
 # DECISIONS.md
 
-## Use protocol-defined wire formats as the only external contract
+## Validation subsystem is the sole authority for protocol conformance checks
 **Status:** Accepted  
-**Context:** The Validation subsystem exchanges identity, event, label, and enforcement data with other Forge subsystems. Interoperability depends on strict adherence to shared protocol references rather than subsystem-local schemas.  
-**Decision:** Implement all Validation subsystem ingress and egress using only the protocol-defined wire formats:
-- CTX-ID as a JWT-like token signed with the TrustLock agent key
-- TrustFlow events as `{event_id, session_id, ctx_id, ts, event_type, payload_hash, sig}`
-- DTL labels as `{label_id, classification, source_id, issued_at, sig}`
-- VTZ enforcement decisions as `{ctx_id, tool_id, verdict: allow|restrict|block, reason}`
+**Context:** The architecture defines multiple signed wire artifacts and decision records used across subsystem boundaries: CTX-ID, TrustFlow events, DTL labels, and VTZ enforcement decisions. Without a single validation authority, producers and consumers could each implement partial or divergent checks, creating inconsistent acceptance criteria and security gaps.  
+**Decision:** Implement the Validation subsystem as the single canonical component that verifies structural, semantic, and signature conformance for all protocol-defined artifacts before they are trusted, persisted, routed, or acted upon.  
+**Consequences:** All components must route inbound protocol objects through Validation before use. Validation logic becomes the source of truth for protocol acceptance and rejection behavior. Downstream systems may perform defensive checks, but those checks must not redefine validity. Protocol evolution must update Validation first.  
+**Rejected alternatives:** Embedding validation independently in each producer/consumer was rejected because it creates drift and inconsistent security posture. Trusting upstream components to self-validate was rejected because signed artifacts can still be malformed, stale, or semantically invalid. Limiting Validation to schema-only checks was rejected because signatures and protocol semantics are security-critical.
 
-Do not add required external fields, rename fields, or reinterpret field semantics in Validation-specific adapters. Any internal model must be mapped losslessly to and from these protocol shapes.  
-**Consequences:** Validation is constrained to validate, store, and emit protocol-compliant artifacts. Internal representations may evolve, but external contracts cannot diverge. Backward-incompatible schema changes must be handled through explicit protocol versioning outside this subsystem.  
-**Rejected alternatives:**  
-- **Define Validation-specific external DTOs:** Rejected because it would create schema drift and force translation layers across subsystems.  
-- **Permit optional subsystem-specific extensions in primary payloads:** Rejected because it weakens interoperability and creates inconsistent validation behavior.  
-- **Treat protocol references as advisory rather than binding:** Rejected because it would allow incompatible implementations and break end-to-end verification.
-
-## Verify signatures at trust boundaries before accepting artifacts
+## Validate CTX-ID strictly against its JWT-like signed wire format
 **Status:** Accepted  
-**Context:** All referenced protocol artifacts include signatures or are derived from signed sources. The Validation subsystem exists to determine authenticity and integrity; therefore, acceptance without cryptographic verification would undermine the trust model.  
-**Decision:** Require signature verification for every signed artifact at the first Validation trust boundary before the artifact is accepted, persisted, or used for downstream decisions:
-- Verify CTX-ID signatures against the TrustLock agent key
-- Verify TrustFlow event signatures using the configured signer trust roots
-- Verify DTL label signatures using the configured label issuer trust roots
+**Context:** CTX-ID is a signed, JWT-like wire artifact and is foundational to session and context propagation. Mis-parsing or weak validation would allow malformed or spoofed context to influence trust decisions and event correlation.  
+**Decision:** Enforce strict parsing and validation of CTX-ID according to its JWT-like wire format, including required field presence, canonical structure, signature verification with the TrustLock agent key, and semantic checks on contained values before accepting the context as valid.  
+**Consequences:** Only correctly formed and correctly signed CTX-IDs are admitted. Components must treat invalid, unverifiable, or semantically inconsistent CTX-IDs as rejected rather than partially usable. Any implementation must preserve exact wire-level semantics and signature verification behavior.  
+**Rejected alternatives:** Treating CTX-ID as an opaque token and only checking presence was rejected because it permits malformed or forged context to propagate. Supporting permissive parsing for backward compatibility was rejected because ambiguity in a signed format undermines interoperability and security. Deferring signature checks until first use was rejected because invalid context could already influence system behavior.
 
-Reject artifacts with missing, invalid, untrusted, or unverifiable signatures. Do not defer signature checks until after business logic execution.  
-**Consequences:** Validation must have access to key material or trust roots required for verification and must fail closed when verification cannot be completed. Downstream components may assume accepted artifacts have already passed authenticity checks.  
-**Rejected alternatives:**  
-- **Verify signatures lazily only when artifacts affect enforcement:** Rejected because unverified data could pollute storage, audit trails, and derived state.  
-- **Accept signed artifacts optimistically and re-verify asynchronously:** Rejected because it introduces race conditions and allows transient use of untrusted inputs.  
-- **Rely on upstream components to verify signatures:** Rejected because Validation must independently enforce trust boundaries and cannot assume upstream correctness.
-
-## Bind all validation operations to CTX-ID
+## Validate TrustFlow events against the canonical event schema before ingestion
 **Status:** Accepted  
-**Context:** Protocol references make CTX-ID the common linkage across events and enforcement decisions. Validation needs a stable correlation handle to reason about provenance, session continuity, and policy outcomes.  
-**Decision:** Require every validation operation to be associated with a CTX-ID, either directly from input artifacts or through deterministic derivation from already validated context. Use `ctx_id` as the primary correlation key for:
-- linking TrustFlow events
-- attaching DTL labels to context
-- producing VTZ enforcement decisions
-- audit and trace retrieval
+**Context:** TrustFlow events are defined by the schema `{event_id, session_id, ctx_id, ts, event_type, payload_hash, sig}` and are used for traceability and downstream trust workflows. Event ingestion must ensure both structural completeness and cryptographic integrity.  
+**Decision:** Require every TrustFlow event to conform exactly to the canonical schema, validate all required fields, verify that `ctx_id` is itself valid or resolvable to a valid CTX-ID, and verify the event signature before the event is accepted for ingestion or processing.  
+**Consequences:** Event producers must emit the complete schema with no omitted required fields. Consumers must not process unsigned, partially formed, or structurally non-conformant events. Correlation logic may assume validated identifiers and timestamps.  
+**Rejected alternatives:** Accepting events with optional omission of schema fields was rejected because downstream correlation depends on a complete event envelope. Allowing schema validation without signature verification was rejected because tampered events would appear structurally valid. Validating only at storage time was rejected because invalid events could contaminate live workflows before persistence.
 
-Do not process or emit context-bearing artifacts without a valid CTX-ID association.  
-**Consequences:** Validation APIs, storage, and logs must index by `ctx_id`. Orphaned artifacts without CTX-ID linkage must be rejected or quarantined according to failure policy, not silently accepted.  
-**Rejected alternatives:**  
-- **Use `session_id` as the primary correlation key:** Rejected because VTZ decisions and CTX-scoped trust semantics are defined around `ctx_id`, not session lifecycle alone.  
-- **Allow best-effort processing for artifacts missing `ctx_id`:** Rejected because it breaks provenance guarantees and makes downstream enforcement ambiguous.  
-- **Generate new local correlation IDs for incomplete inputs:** Rejected because local IDs cannot substitute for protocol-level context identity.
-
-## Enforce exact field-level validation for TrustFlow events
+## Validate DTL labels as signed classification artifacts
 **Status:** Accepted  
-**Context:** TrustFlow events are a signed protocol artifact with a fixed schema. Validation must ensure both structural correctness and semantic completeness before events are used as evidence or audit records.  
-**Decision:** Validate every TrustFlow event against the exact schema `{event_id, session_id, ctx_id, ts, event_type, payload_hash, sig}` and reject events that:
-- omit any required field
-- include malformed field values
-- contain invalid signatures
-- cannot be bound to an accepted CTX-ID
+**Context:** DTL labels use the wire format `{label_id, classification, source_id, issued_at, sig}` and drive classification-aware behavior. Because labels represent trust-bearing assertions, they require stronger guarantees than simple data-shape validation.  
+**Decision:** Enforce validation of DTL labels as signed artifacts by checking required fields, allowed classification semantics, source identity presence, issuance metadata, and signature validity before any label is used for policy, routing, or display.  
+**Consequences:** Unsigned or semantically invalid labels cannot influence any decision path. Classification values must be interpreted from a constrained, validated set rather than free-form input. Label provenance becomes mandatory for downstream use.  
+**Rejected alternatives:** Treating labels as advisory metadata without signature checks was rejected because untrusted labels could manipulate policy outcomes. Allowing arbitrary classification strings was rejected because it would fragment policy interpretation. Accepting labels with missing provenance fields was rejected because unverifiable source attribution weakens trust decisions.
 
-Treat `payload_hash` as the integrity reference for event payload content; do not substitute raw payload comparison as the primary integrity mechanism.  
-**Consequences:** Event ingestion requires strict schema validation and integrity checks. Storage and processing pipelines cannot rely on partially populated or schema-flexible event objects. Event producers must conform exactly to the shared schema.  
-**Rejected alternatives:**  
-- **Accept partial events and infer missing fields:** Rejected because inferred security metadata is not trustworthy.  
-- **Store raw events first and validate later:** Rejected because invalid events would contaminate audit and evidence stores.  
-- **Use ad hoc payload checks instead of `payload_hash`:** Rejected because the protocol explicitly defines hashed payload integrity and signatures over event data.
-
-## Treat DTL labels as signed attestations, not mutable annotations
+## Validate VTZ enforcement decisions as canonical verdict records
 **Status:** Accepted  
-**Context:** DTL labels communicate classification and source attribution in a signed wire format. Validation must preserve their evidentiary value and prevent local mutation from invalidating provenance.  
-**Decision:** Handle DTL labels as immutable signed attestations with the wire format `{label_id, classification, source_id, issued_at, sig}`. After verification, do not modify any signed field in place. If enrichment is required, store enrichment separately as unsigned Validation metadata linked to `label_id` and `ctx_id`.  
-**Consequences:** Validation storage must distinguish between signed label content and local derived metadata. Consumers must not expect Validation to rewrite label classifications, issuer identifiers, or issuance timestamps. Corrections require issuance of a new label, not mutation of an existing one.  
-**Rejected alternatives:**  
-- **Normalize or rewrite label fields after ingestion:** Rejected because it destroys signature validity and provenance.  
-- **Merge local annotations directly into the label object:** Rejected because it blurs attested data with local opinion and complicates verification.  
-- **Treat labels as advisory tags with no signature enforcement:** Rejected because the protocol defines them as signed artifacts with source accountability.
+**Context:** VTZ enforcement decisions are defined as `{ctx_id, tool_id, verdict: allow|restrict|block, reason}` and directly constrain tool execution. Since these records affect enforcement, Validation must ensure both format correctness and a closed verdict set.  
+**Decision:** Validate every VTZ enforcement decision against the canonical structure, require a valid `ctx_id`, require a `tool_id`, constrain `verdict` to exactly `allow`, `restrict`, or `block`, and require a non-empty `reason` before the decision is accepted for enforcement or audit.  
+**Consequences:** Enforcement components may rely on a normalized and finite verdict vocabulary. Invalid or ambiguous decisions are rejected rather than interpreted leniently. Audit records remain consistent across implementations.  
+**Rejected alternatives:** Allowing extensible free-form verdict values was rejected because enforcement logic must remain deterministic and interoperable. Making `reason` optional was rejected because operator and audit traceability would be degraded. Validating `ctx_id` only syntactically was rejected because enforcement must bind to trusted context, not merely well-formed identifiers.
 
-## Emit only explicit VTZ verdicts and reasons
+## Reject invalid artifacts fail-closed rather than degrade gracefully
 **Status:** Accepted  
-**Context:** The Validation subsystem contributes to enforcement by producing decisions consumed by VTZ. The protocol reference defines a narrow decision shape with a constrained verdict set.  
-**Decision:** Emit enforcement decisions only in the format `{ctx_id, tool_id, verdict: allow|restrict|block, reason}`. Restrict verdict values to the enumerated set `allow`, `restrict`, or `block`. Always include a machine-usable `reason` explaining the basis for the decision. Do not emit implicit allow, null verdicts, or subsystem-specific verdict extensions.  
-**Consequences:** Decision producers must map all internal outcomes into the three allowed verdicts. Consumers can rely on a stable, closed decision vocabulary. If more nuance is required, it must be encoded in `reason` or handled by a separately versioned protocol change.  
-**Rejected alternatives:**  
-- **Add extra verdicts such as `warn`, `defer`, or `unknown`:** Rejected because they are outside the protocol and create ambiguity in enforcement behavior.  
-- **Omit `reason` for successful decisions:** Rejected because auditability and policy traceability require justification for every verdict.  
-- **Use booleans instead of verdict enums:** Rejected because the protocol requires three-state enforcement semantics, not binary authorization.
+**Context:** The Validation subsystem sits on the trust boundary for signed protocol artifacts. In security-sensitive workflows, permissive fallback behavior turns validation failures into exploitable ambiguity.  
+**Decision:** Reject any artifact that fails parsing, required-field checks, semantic validation, or signature verification, and do not substitute defaults, partial acceptance, or best-effort interpretation for protocol-defined inputs.  
+**Consequences:** Callers must handle explicit validation failures and cannot assume malformed input will be normalized. Operational processes must account for rejection paths and observability around invalid inputs. Security posture is prioritized over permissive interoperability.  
+**Rejected alternatives:** Graceful degradation with partial field acceptance was rejected because it creates undefined behavior for signed protocols. Auto-repair or normalization of malformed artifacts was rejected because modifying signed or canonical inputs can invalidate provenance and mask producer defects. Quarantining but still processing suspect artifacts was rejected because downstream systems may mistakenly treat them as trusted.
 
-## Fail closed on validation ambiguity or trust resolution failure
+## Separate structural validation, semantic validation, and signature verification as distinct phases
 **Status:** Accepted  
-**Context:** The Validation subsystem operates on signed security artifacts and influences enforcement outcomes. Ambiguous validation states, unavailable trust roots, or unresolved context links must not degrade into permissive behavior.  
-**Decision:** Fail closed whenever Validation cannot conclusively verify authenticity, integrity, schema compliance, or CTX-ID binding. In such cases:
-- reject inbound artifacts from acceptance paths
-- quarantine artifacts only if they are excluded from normal decision flows
-- emit VTZ decisions as `restrict` or `block`, never `allow`, when enforcement must proceed under unresolved validation state
+**Context:** The subsystem must validate multiple artifact types with different wire formats but shared needs for shape checking, semantic interpretation, and cryptographic verification. A phased approach improves determinism and diagnostics.  
+**Decision:** Implement validation in explicit phases: structural parsing and required-field checks first, semantic and domain-rule validation second, and signature verification against the appropriate trust material as a distinct step with explicit outcome reporting.  
+**Consequences:** Validation behavior becomes predictable and easier to reason about across artifact types. Error reporting can distinguish malformed data from invalid semantics and failed signatures. Implementations are constrained to preserve phase boundaries rather than mixing concerns ad hoc.  
+**Rejected alternatives:** A single monolithic validation routine per artifact type was rejected because it obscures failure causes and encourages duplication. Performing signature verification before structure checks was rejected because the wire artifact must first be parsed deterministically. Deferring semantic checks to downstream consumers was rejected because accepted artifacts must already meet protocol expectations.
 
-Do not substitute defaults that mask verification failure.  
-**Consequences:** Operational outages in key resolution, signer trust configuration, or schema validation will reduce availability in favor of safety. System operators must provide observability and recovery paths for quarantined or blocked items.  
-**Rejected alternatives:**  
-- **Fail open during transient verifier or key-service outages:** Rejected because it would permit untrusted artifacts to influence enforcement.  
-- **Downgrade all uncertain cases to warnings while allowing execution:** Rejected because warnings are not an enforcement outcome in the protocol and do not preserve safety.  
-- **Silently drop unverifiable artifacts:** Rejected because it impairs auditability and incident investigation.
-
-## Preserve protocol artifacts in canonical form for audit and replay
+## Use protocol-defined canonical field sets and do not admit undeclared compatibility shapes
 **Status:** Accepted  
-**Context:** Validation decisions may need to be audited, re-evaluated, or replayed as trust configuration changes. This requires preserving what was actually received and verified, not only normalized internal projections.  
-**Decision:** Store the canonical received form of CTX-ID, TrustFlow events, DTL labels, and emitted VTZ decisions alongside validation results and timestamps. Any internal normalization must be supplemental and must not replace the original verified artifact representation.  
-**Consequences:** Audit and replay workflows can reconstruct verification inputs exactly as processed. Storage design must account for canonical artifact retention and linkage to validation outcomes. Internal model changes will not invalidate historical evidence.  
-**Rejected alternatives:**  
-- **Store only normalized internal records:** Rejected because normalization can lose verification-relevant details and prevents exact replay.  
-- **Store only hashes of validated artifacts:** Rejected because hashes alone are insufficient for full audit reconstruction and debugging.  
-- **Retain originals only for failed validations:** Rejected because successful decisions also require traceability and potential re-verification.
+**Context:** The TRDs provide explicit wire formats and schemas for Validation to enforce. Allowing alternate field names, extra compatibility envelopes, or multiple accepted shapes would weaken interoperability and complicate signing assumptions.  
+**Decision:** Accept only the protocol-defined canonical field sets and shapes for CTX-ID, TrustFlow events, DTL labels, and VTZ enforcement decisions, and reject undeclared aliases, wrapper formats, or shape variations unless the protocol reference is formally revised.  
+**Consequences:** Producers must emit canonical wire representations. Consumers and validators share a stable contract with low ambiguity. Protocol upgrades require explicit schema revision rather than implicit compatibility hacks.  
+**Rejected alternatives:** Supporting alias fields or version-by-convention parsing was rejected because it introduces ambiguity in signed payload interpretation. Allowing extra compatibility wrappers was rejected because it complicates canonicalization and cross-system interoperability. Best-effort field mapping was rejected because it hides producer non-conformance and makes validation outcomes non-deterministic.
+
+## Validation results must be explicit and artifact-type specific
+**Status:** Accepted  
+**Context:** Because the subsystem validates multiple protocol artifacts with security and enforcement impact, callers need deterministic outcomes that indicate both acceptability and failure reason categories. Generic pass/fail behavior is insufficient for integration and auditing.  
+**Decision:** Return explicit validation outcomes per artifact type that distinguish success from rejection and identify whether failure occurred in structure, semantics, or signature verification, without permitting callers to override a rejection into acceptance.  
+**Consequences:** Integrators can build clear error handling and observability around validation failures. Auditability improves because rejection causes are categorized consistently. The Validation subsystem constrains downstream callers to treat failure as terminal for trust-bearing use.  
+**Rejected alternatives:** Returning only boolean validity was rejected because it obscures operational diagnosis and integration behavior. Exposing low-level parser exceptions directly as the API contract was rejected because it is unstable and implementation-coupled. Allowing caller-specified validation leniency was rejected because validity criteria must remain centralized and uniform.
