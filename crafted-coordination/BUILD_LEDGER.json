@@ -1,0 +1,51 @@
+{
+  "build_id": "validation-aae9cb5c",
+  "subsystem": "Validation",
+  "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
+  "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore implementing add/get/list/complete/delete operations (FR-8 through FR-14), and a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), with the package root re-exporting the public API (FR-20). The entire library uses zero external dependencies (NFR-1) and the build is decomposed to validate the Crafted Dev Agent pipeline's ability to close a full dependency chain: docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI.\n\nOperator on 'Should the PR decomposition follow the exact 5-step dependen':\nthe agent free to combine steps as long as the dependency ordering is preserved and the per-PR limits (\u22643 implementation files, \u22646 acceptance criteria) from \u00a76 are respected\n\nOperator on 'For the unique task identifier (FR-1), should the implementa':\nuse the PRD process to fill in any gaps using best practices\n\nOperator on 'Should tests be co-located in each component PR (e.g., tests':\nleverage best practices",
+  "created_at": 1774651647.2342458,
+  "updated_at": 1774651647.234286,
+  "updated_by": "todd-gould",
+  "prd_plan": [
+    {
+      "prd_id": "PRD-001",
+      "title": "Documentation Set \u2014 README, ARCHITECTURE, and API Reference",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-002",
+      "title": "Python Package Scaffold \u2014 Directory Tree and Empty __init__.py Files",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-003",
+      "title": "Task Model \u2014 TaskStatus Enumeration, Task Dataclass, and Model-Layer Tests",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-004",
+      "title": "In-Memory Task Store \u2014 CRUD Operations with Status Filtering and Storage-Layer Tests",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    },
+    {
+      "prd_id": "PRD-005",
+      "title": "CLI Entry Point, Package Root Public API Re-exports, and Integration Tests",
+      "status": "pending",
+      "engineer_id": "",
+      "pr_ids": []
+    }
+  ],
+  "pr_entries": {},
+  "knowledge_notes": [],
+  "version": 1,
+  "schema_version": 3,
+  "agent_version": "39.96.0"
+}
