@@ -1,623 +1,577 @@
-# INTERFACES.md
+# Interface Contracts - Validation
 
-## Interface Contracts
+## Data Structures
 
-This document defines the wire formats, API-facing structures, validation rules, and subsystem boundaries derived solely from the provided TRD materials.
+### Task
 
----
+Represents a single unit of work.
 
-## Scope
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `id` | `string` | yes | Unique identifier. Generated automatically on creation. |
+| `title` | `string` | yes | Must be non-empty. |
+| `status` | `TaskStatus` | yes | Allowed values are `pending`, `in_progress`, `done`. Default is `pending` at creation. Must be represented as an enumeration, not a free-form string domain. |
+| `created_at` | `number` | yes | Numeric timestamp. |
 
-The provided TRD content defines a deliberately simple Python task management library named `tasklib`, intended to validate an end-to-end Crafted Dev Agent pipeline.
-
-The documented dependency chain is:
-
-`docs → scaffold → model → storage → CLI`
-
-From the TRD, the only explicitly derivable subsystems are:
-
-- Documentation
-- Scaffold
-- Model
-- Storage
-- CLI
-
-No network protocol, persistence encoding, RPC mechanism, or external service contract is specified in the provided TRDs. Therefore, this document defines only the interfaces that are directly implied by the TRD text and avoids introducing unstated transport or implementation details.
+#### Task creation constraints
+- `id` MUST be generated automatically on creation.
+- `title` MUST be present and MUST be non-empty.
+- `status` defaults to `pending` if omitted at creation.
+- `created_at` MUST be recorded at creation time as a numeric timestamp.
 
 ---
 
-## Per-Subsystem Data Structures
+### CTX-ID
 
-### 1. Documentation Subsystem
+Per-session, per-agent signed token binding identity, VTZ, policy, and permissions.
 
-The TRD explicitly lists a documentation set consisting of:
+Fields are defined exactly as follows:
 
-- `README`
-- `ARCHITECTURE overview`
-- `API reference`
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `agent_id` | `string` | yes | Immutable once issued. |
+| `session_id` | `string` | yes | Immutable once issued. |
+| `vtz_scope` | `string` | yes | Binds the session to exactly one VTZ at issuance. Immutable once issued. |
+| `policy_revision` | `string` \| `number` | yes | Immutable once issued. Exact source type not further constrained in the provided standards; value is part of the signed token. |
+| `issued_at` | `number` | yes | Timestamp. Immutable once issued. |
+| `sig` | `string` | yes | Signature. Must validate against TrustLock public key. Immutable once issued. |
 
-#### Data Structure: DocumentationSet
-
-| Field | Type | Constraints |
-|---|---|---|
-| `readme` | `DocumentRef` | Required |
-| `architecture_overview` | `DocumentRef` | Required |
-| `api_reference` | `DocumentRef` | Required |
-
-#### Data Structure: DocumentRef
-
-| Field | Type | Constraints |
-|---|---|---|
-| `name` | `string` | Required; one of `README`, `ARCHITECTURE`, `API_REFERENCE` |
-| `path` | `string` | Required; repository-relative path |
-| `status` | `string` | Optional; unconstrained by TRD |
+#### CTX-ID constraints
+- CTX-ID tokens are **IMMUTABLE once issued**.
+- Rotation creates a new token; the old one is invalidated immediately.
+- Missing CTX-ID MUST be treated as `UNTRUSTED`.
+- Expired CTX-ID MUST be rejected.
+- CTX-ID MUST be validated against TrustLock public key.
+- Every entry point that processes an agent action MUST call CTX-ID validation first.
 
 ---
 
-### 2. Scaffold Subsystem
+### TrustFlowEvent
 
-The TRD specifies:
+Required event emitted for every action outcome.
 
-- a Python package scaffold
-- multiple package directories
-- mirror behavior to the local test workspace
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `event_id` | `string` | yes | Globally unique. CSPRNG-generated, not sequential. |
+| `session_id` | `string` | yes | Must identify the session associated with the action. |
+| `ctx_id` | `string` | yes | CTX-ID reference for the action. |
+| `ts` | `number` | yes | UTC Unix timestamp with millisecond precision. |
+| `event_type` | `string` | yes | Event kind. Exact allowed values not defined in provided standards. |
+| `payload_hash` | `string` | yes | SHA-256 of the serialized action payload. |
 
-#### Data Structure: PythonPackageScaffold
-
-| Field | Type | Constraints |
-|---|---|---|
-| `package_directories` | `list[string]` | Required; one or more package directory paths |
-| `mirrored_to_local_test_workspace` | `boolean` | Required |
-| `source_root` | `string` | Optional; repository-relative path if present |
-| `workspace_root` | `string` | Optional; local test workspace path if present |
-
-#### Data Structure: ScaffoldMirrorOperation
-
-| Field | Type | Constraints |
-|---|---|---|
-| `source_path` | `string` | Required |
-| `destination_path` | `string` | Required |
-| `recursive` | `boolean` | Required |
-| `status` | `string` | Optional; unconstrained by TRD |
+#### TrustFlowEvent constraints
+- Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
+- Emission MUST be synchronous in the enforcement path.
+- Async buffering is not permitted.
+- Failed emission is a WARN-level audit event.
+- Failure MUST NOT silently continue; it must be logged and surfaced.
 
 ---
 
-### 3. Model Subsystem
+### VTZEnforcementDecision
 
-The TRD names a `model` stage in the dependency chain, but does not provide concrete fields or schema for task entities.
+Produced when VTZ policy is evaluated.
 
-Because the library is a task management library, the only safe derivation is that a task model exists. No specific fields such as `id`, `title`, `status`, or timestamps are stated in the TRD. Therefore, the model contract is intentionally minimal.
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `verdict` | `VTZVerdict` | yes | On VTZ policy denial, MUST be `block`. |
 
-#### Data Structure: TaskModel
-
-| Field | Type | Constraints |
-|---|---|---|
-| `type` | `string` | Required; must be `task` |
-
-#### Data Structure: ModelModuleContract
-
-| Field | Type | Constraints |
-|---|---|---|
-| `module_name` | `string` | Required; expected to identify model package/module |
-| `imports_resolvable_locally` | `boolean` | Required; code PR imports from previously merged PRs must resolve locally before CI |
+#### VTZEnforcementDecision constraints
+- Every action MUST be checked against VTZ policy before execution.
+- VTZ policy denial MUST produce a `VTZEnforcementDecision` record with `verdict=block`.
 
 ---
 
-### 4. Storage Subsystem
+### ValidationResult
 
-The TRD names a `storage` stage in the dependency chain, but does not define persistence media, storage engines, or serialization.
+Canonical validation response structure for the Validation subsystem.
 
-Only a minimal subsystem contract can be derived.
+This structure is derived from the required validation behavior in the standards and is the recommended wire contract for validation outcomes.
 
-#### Data Structure: StorageModuleContract
-
-| Field | Type | Constraints |
-|---|---|---|
-| `module_name` | `string` | Required; expected to identify storage package/module |
-| `depends_on_model` | `boolean` | Required; implied by dependency chain ordering |
-| `imports_resolvable_locally` | `boolean` | Required; must resolve locally before CI |
-
----
-
-### 5. CLI Subsystem
-
-The TRD names a `CLI` stage in the dependency chain, but provides no command list, option schema, or I/O encoding.
-
-Only the dependency-facing interface can be documented.
-
-#### Data Structure: CliModuleContract
-
-| Field | Type | Constraints |
-|---|---|---|
-| `module_name` | `string` | Required; expected to identify CLI package/module |
-| `depends_on_storage` | `boolean` | Required; implied by dependency chain ordering |
-| `imports_resolvable_locally` | `boolean` | Required; must resolve locally before CI |
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `valid` | `boolean` | yes | `true` only when all applicable validation rules pass. |
+| `errors` | `ValidationError[]` | yes | Empty array when `valid=true`. |
+| `warnings` | `ValidationWarning[]` | yes | Empty array if none. |
+| `decision` | `VTZEnforcementDecision` | no | Required when VTZ policy is evaluated. On denial, `verdict` MUST be `block`. |
+| `trustflow_event` | `TrustFlowEvent` | no | Present when emission succeeds synchronously. |
+| `ctx_id_status` | `CTXIDStatus` | no | Present for CTX-ID validation flows. |
 
 ---
 
-### 6. Pipeline / PR Validation Subsystem
+### ValidationError
 
-The TRD explicitly defines validation goals around merge behavior and dependency recognition.
-
-#### Data Structure: PullRequestDependencyEvent
-
-| Field | Type | Constraints |
-|---|---|---|
-| `pr_type` | `string` | Required; one of `documentation`, `scaffold`, `code` |
-| `merged` | `boolean` | Required |
-| `recognized_by_downstream_prs` | `boolean` | Required for `documentation`; optional otherwise |
-| `resolves_imports_locally_before_ci` | `boolean` | Required for `code`; optional otherwise |
-
-#### Data Structure: DependencyChainStatus
-
-| Field | Type | Constraints |
-|---|---|---|
-| `docs_complete` | `boolean` | Required |
-| `scaffold_complete` | `boolean` | Required |
-| `model_complete` | `boolean` | Required |
-| `storage_complete` | `boolean` | Required |
-| `cli_complete` | `boolean` | Required |
-| `chain_closed` | `boolean` | Required; represents `docs → scaffold → model → storage → CLI` closure |
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `code` | `string` | yes | Stable machine-readable error code. |
+| `message` | `string` | yes | Human-readable description. |
+| `field` | `string` | no | Field name associated with the error, if applicable. |
+| `constraint` | `string` | no | Violated rule description. |
 
 ---
 
-## Cross-Subsystem Protocols
+### ValidationWarning
 
-### 1. Dependency Chain Protocol
-
-The TRD explicitly defines the subsystem dependency order:
-
-1. Documentation
-2. Scaffold
-3. Model
-4. Storage
-5. CLI
-
-#### Contract
-
-- `scaffold` depends on successful prior documentation merge state.
-- `model` depends on scaffold availability.
-- `storage` depends on model availability.
-- `cli` depends on storage availability.
-- The chain is considered closed only when all stages are complete in order.
-
-#### Ordered Dependency Representation
-
-```text
-docs -> scaffold -> model -> storage -> cli
-```
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `code` | `string` | yes | Stable machine-readable warning code. |
+| `message` | `string` | yes | Human-readable description. |
 
 ---
 
-### 2. Merge Recognition Protocol
+### CPFInspectionResult
 
-The TRD states:
+Represents the three-tier CPF evaluation outcome.
 
-- A documentation PR fires the merge gate.
-- Downstream PRs recognize that merge.
-
-#### Contract
-
-A downstream subsystem MUST be able to observe that the upstream PR has merged before proceeding as a dependent stage.
-
-#### Minimal Exchange Fields
-
-| Field | Type | Meaning |
-|---|---|---|
-| `pr_type` | `string` | Upstream PR classification |
-| `merged` | `boolean` | Whether merge occurred |
-| `recognized_by_downstream_prs` | `boolean` | Whether dependent PRs detected that merge |
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `tier_1_structural` | `CPFCheckResult` | yes | Tier 1 structural validation: schema, bounds checking. |
+| `tier_2_semantic` | `CPFCheckResult` | yes | Tier 2 semantic classification: intent, data sensitivity, policy match. |
+| `tier_3_behavioral` | `CPFCheckResult` | yes | Tier 3 behavioral analysis: anomaly detection, attack pattern recognition. |
+| `passed` | `boolean` | yes | `true` only if all tiers pass. Fail closed. |
 
 ---
 
-### 3. Local Workspace Mirror Protocol
+### CPFCheckResult
 
-The TRD states:
-
-- A scaffold PR with multiple package directories mirrors files to the local test workspace.
-
-#### Contract
-
-For each package directory in the scaffold, a mirror operation copies or reflects repository package contents into the local test workspace.
-
-#### Minimal Exchange Fields
-
-| Field | Type | Meaning |
-|---|---|---|
-| `package_directories` | `list[string]` | Directories to mirror |
-| `source_path` | `string` | Original path |
-| `destination_path` | `string` | Mirrored workspace path |
-| `recursive` | `boolean` | Whether directory contents are mirrored recursively |
-
----
-
-### 4. Local Import Resolution Protocol
-
-The TRD states:
-
-- Code PRs that import from previously-merged PRs resolve those imports locally before CI.
-
-#### Contract
-
-Before CI execution, any code artifact in a downstream PR that imports symbols from a previously merged upstream PR MUST resolve those imports in the local workspace.
-
-#### Minimal Exchange Fields
-
-| Field | Type | Meaning |
-|---|---|---|
-| `module_name` | `string` | Module performing imports |
-| `imports_resolvable_locally` | `boolean` | Whether local resolution succeeds |
-| `merged` | `boolean` | Whether the upstream dependency is already merged |
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `passed` | `boolean` | yes | Result of the tier check. |
+| `reasons` | `string[]` | yes | Empty array when `passed=true`. |
 
 ---
 
 ## Enums and Constants
 
-### PRType
+### `TaskStatus`
 
-```text
-documentation
-scaffold
-code
-```
+Allowed values:
 
----
+- `pending`
+- `in_progress`
+- `done`
 
-### DocumentName
-
-```text
-README
-ARCHITECTURE
-API_REFERENCE
-```
+Constraints:
+- Must be implemented as an enumeration.
+- Must not be treated as a free-form status string set.
 
 ---
 
-### SubsystemName
+### `VTZVerdict`
 
-```text
-docs
-scaffold
-model
-storage
-cli
-```
+Allowed values required by provided standards:
 
----
+- `block`
 
-### DependencyChain
-
-```text
-docs -> scaffold -> model -> storage -> cli
-```
+Notes:
+- The standards explicitly require `verdict=block` on VTZ policy denial.
+- Other verdict values are not defined in the provided source and must not be inferred as contractual.
 
 ---
 
-### LibraryName
+### `CTXIDStatus`
 
-```text
-tasklib
-```
+Allowed values:
+
+- `valid`
+- `invalid`
+- `expired`
+- `missing`
+- `untrusted`
+
+Constraints:
+- Missing CTX-ID MUST be treated as `UNTRUSTED`.
+- Expired CTX-ID MUST be rejected.
 
 ---
 
-### TRD Metadata Constants
+### TrustFlow timing constant
 
-Derived directly from the provided TRD header:
+| Name | Value | Meaning |
+|---|---|---|
+| `ts` precision | `millisecond` | UTC Unix timestamp with millisecond precision |
 
-| Constant | Value |
-|---|---|
-| `TRD_NAME` | `TRD-TASKLIB` |
-| `TRD_VERSION` | `1.0` |
-| `TRD_STATUS` | `Draft` |
-| `TRD_DATE` | `2026-03-26` |
-| `LIBRARY_NAME` | `tasklib` |
+---
+
+### CPF processing constant
+
+| Name | Value | Meaning |
+|---|---|---|
+| enforcement mode | `fail closed` | All CPF tiers run synchronously in the enforcement path; failures reject processing. |
 
 ---
 
 ## Validation Rules
 
-### 1. Documentation Validation
+### 1. Task validation
 
-A valid documentation interface state MUST satisfy all of the following:
+#### Required fields
+- `id` MUST be present on a materialized `Task`.
+- `title` MUST be present.
+- `status` MUST be present on a materialized `Task`.
+- `created_at` MUST be present.
 
-- `readme` is present
-- `architecture_overview` is present
-- `api_reference` is present
-
-#### Rule Expression
-
-```text
-DocumentationSet is valid iff:
-readme != null
-and architecture_overview != null
-and api_reference != null
-```
-
----
-
-### 2. Scaffold Validation
-
-A valid scaffold interface state MUST satisfy:
-
-- `package_directories` contains at least one entry
-- multiple package directories are permitted
-- mirror behavior to the local test workspace is represented
-- each mirror operation has both source and destination paths
-
-#### Rule Expression
-
-```text
-PythonPackageScaffold is valid iff:
-len(package_directories) >= 1
-and mirrored_to_local_test_workspace == true
-```
-
-```text
-ScaffoldMirrorOperation is valid iff:
-source_path is non-empty
-and destination_path is non-empty
-and recursive is boolean
-```
+#### Field rules
+- `id` MUST be unique and generated automatically on creation.
+- `title` MUST be a string and MUST be non-empty.
+- `status` MUST be one of:
+  - `pending`
+  - `in_progress`
+  - `done`
+- `status` defaults to `pending` at creation if omitted.
+- `created_at` MUST be a numeric timestamp.
 
 ---
 
-### 3. Model Validation
+### 2. CTX-ID validation
 
-A valid model interface state MUST satisfy:
+Validation order and behavior are mandatory.
 
-- the model identifies itself as a task model
-- local import resolution is explicitly represented for dependency handling
+#### Entry-point rule
+- Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
 
-#### Rule Expression
+#### Rejection rule
+- CTX-ID validation failure MUST result in immediate rejection.
+- No partial processing is permitted after CTX-ID validation failure.
 
-```text
-TaskModel is valid iff:
-type == "task"
-```
-
-```text
-ModelModuleContract is valid iff:
-module_name is non-empty
-and imports_resolvable_locally is boolean
-```
-
----
-
-### 4. Storage Validation
-
-A valid storage interface state MUST satisfy:
-
-- dependency on model is represented
-- local import resolution is explicitly represented
-
-#### Rule Expression
-
-```text
-StorageModuleContract is valid iff:
-module_name is non-empty
-and depends_on_model == true
-and imports_resolvable_locally is boolean
-```
+#### Token rules
+- CTX-ID MUST be present for trusted processing.
+- Missing CTX-ID MUST be treated as `UNTRUSTED`.
+- Expired CTX-ID MUST be rejected.
+- CTX-ID MUST validate against TrustLock public key.
+- CTX-ID fields are immutable once issued.
+- Rotation MUST create a new token and invalidate the old token immediately.
 
 ---
 
-### 5. CLI Validation
+### 3. VTZ validation
 
-A valid CLI interface state MUST satisfy:
-
-- dependency on storage is represented
-- local import resolution is explicitly represented
-
-#### Rule Expression
-
-```text
-CliModuleContract is valid iff:
-module_name is non-empty
-and depends_on_storage == true
-and imports_resolvable_locally is boolean
-```
+- Every agent session is bound to exactly one VTZ at CTX-ID issuance.
+- Every action MUST be checked against VTZ policy BEFORE execution.
+- Cross-VTZ tool calls require explicit policy authorization.
+- Implicit authorization is denied.
+- VTZ boundaries are structural, not advisory.
+- VTZ policy changes take effect at next CTX-ID issuance, not mid-session.
+- VTZ policy denial MUST produce a `VTZEnforcementDecision` with:
+  - `verdict`: `block`
 
 ---
 
-### 6. Merge Recognition Validation
+### 4. TrustFlow validation
 
-A valid merge recognition event MUST satisfy:
-
-- `pr_type` is one of the allowed enum values
-- `merged` is boolean
-- if `pr_type == documentation`, `recognized_by_downstream_prs` must be present
-
-#### Rule Expression
-
-```text
-PullRequestDependencyEvent is valid iff:
-pr_type in {"documentation", "scaffold", "code"}
-and merged is boolean
-and (
-  pr_type != "documentation"
-  or recognized_by_downstream_prs is boolean
-)
-and (
-  pr_type != "code"
-  or resolves_imports_locally_before_ci is boolean
-)
-```
+- Every action outcome MUST emit a TrustFlow event.
+- Outcomes include:
+  - `allow`
+  - `restrict`
+  - `block`
+- Every `TrustFlowEvent` MUST include:
+  - `event_id`
+  - `session_id`
+  - `ctx_id`
+  - `ts`
+  - `event_type`
+  - `payload_hash`
+- `event_id` MUST be globally unique and CSPRNG-generated.
+- `ts` MUST be a UTC Unix timestamp with millisecond precision.
+- `payload_hash` MUST be SHA-256 of the serialized action payload.
+- Emission MUST be synchronous in the enforcement path.
+- Async buffering is not permitted.
+- Emission failure MUST be logged and surfaced.
+- Emission failure is a WARN-level audit event.
+- Emission failure MUST NOT silently continue.
 
 ---
 
-### 7. Dependency Chain Closure Validation
+### 5. CPF validation
 
-A valid closed chain MUST satisfy all stage-complete flags and the chain closure flag.
+- CPF is a three-tier inspection and classification engine within CAL.
+- Tier 1 MUST perform structural validation, including:
+  - schema validation
+  - bounds checking
+- Tier 2 MUST perform semantic classification, including:
+  - intent
+  - data sensitivity
+  - policy match
+- Tier 3 MUST perform behavioral analysis, including:
+  - anomaly detection
+  - attack pattern recognition
+- All three tiers MUST run synchronously in the enforcement path.
+- CPF MUST fail closed.
 
-#### Rule Expression
+---
 
-```text
-DependencyChainStatus is closed iff:
-docs_complete == true
-and scaffold_complete == true
-and model_complete == true
-and storage_complete == true
-and cli_complete == true
-and chain_closed == true
-```
+### 6. CAL enforcement validation
+
+- No tool call, data read, API invocation, or agent handoff executes without passing through CAL policy evaluation.
+- CAL is the enforcement choke point for all agent-originated action.
+- CAL sits above the VTZ enforcement plane and below application orchestration.
 
 ---
 
 ## Wire Format Examples
 
-The TRDs do not prescribe a serialization format. For documentation purposes, the following examples use JSON as an illustrative wire format only.
-
-### 1. Documentation Set Example
+### Valid Task
 
 ```json
 {
-  "readme": {
-    "name": "README",
-    "path": "README.md",
-    "status": "present"
-  },
-  "architecture_overview": {
-    "name": "ARCHITECTURE",
-    "path": "ARCHITECTURE.md",
-    "status": "present"
-  },
-  "api_reference": {
-    "name": "API_REFERENCE",
-    "path": "docs/API.md",
-    "status": "present"
-  }
+  "id": "task_01JXYZ8A1M7K9P2Q4R6S8T0U1V",
+  "title": "Write INTERFACES.md",
+  "status": "pending",
+  "created_at": 1712345678
 }
 ```
 
----
-
-### 2. Scaffold Example
+### Invalid Task: empty title
 
 ```json
 {
-  "package_directories": [
-    "tasklib",
-    "tasklib/model",
-    "tasklib/storage",
-    "tasklib/cli"
+  "id": "task_01JXYZ8A1M7K9P2Q4R6S8T0U1V",
+  "title": "",
+  "status": "pending",
+  "created_at": 1712345678
+}
+```
+
+Reason:
+- `title` must be non-empty.
+
+---
+
+### Invalid Task: bad status
+
+```json
+{
+  "id": "task_01JXYZ8A1M7K9P2Q4R6S8T0U1V",
+  "title": "Implement storage",
+  "status": "blocked",
+  "created_at": 1712345678
+}
+```
+
+Reason:
+- `status` must be one of `pending`, `in_progress`, `done`.
+
+---
+
+### Valid CTX-ID payload
+
+```json
+{
+  "agent_id": "agent-123",
+  "session_id": "session-456",
+  "vtz_scope": "vtz-alpha",
+  "policy_revision": "2026-03-01",
+  "issued_at": 1712345678123,
+  "sig": "base64-signature"
+}
+```
+
+### Invalid CTX-ID payload: missing signature
+
+```json
+{
+  "agent_id": "agent-123",
+  "session_id": "session-456",
+  "vtz_scope": "vtz-alpha",
+  "policy_revision": "2026-03-01",
+  "issued_at": 1712345678123
+}
+```
+
+Reason:
+- `sig` is required.
+- CTX-ID must validate against TrustLock public key.
+
+---
+
+### Valid TrustFlowEvent
+
+```json
+{
+  "event_id": "evt_4f1d6a0f4d6f4b5e8a8f5f8f7e6d3c2b",
+  "session_id": "session-456",
+  "ctx_id": "ctx_abc123",
+  "ts": 1712345678123,
+  "event_type": "block",
+  "payload_hash": "3f0a377ba0a4a460ecb616f6507ce0d8cfa3e704025d4b17d4cd6a1d8f8d235b"
+}
+```
+
+### Invalid TrustFlowEvent: sequential ID and missing payload hash
+
+```json
+{
+  "event_id": "1001",
+  "session_id": "session-456",
+  "ctx_id": "ctx_abc123",
+  "ts": 1712345678,
+  "event_type": "allow"
+}
+```
+
+Reasons:
+- `event_id` must be globally unique and CSPRNG-generated, not sequential.
+- `payload_hash` is required.
+- `ts` must be UTC Unix timestamp with millisecond precision.
+
+---
+
+### Valid VTZEnforcementDecision on denial
+
+```json
+{
+  "verdict": "block"
+}
+```
+
+### Invalid VTZEnforcementDecision on denial
+
+```json
+{
+  "verdict": "deny"
+}
+```
+
+Reason:
+- VTZ policy denial must produce `verdict=block`.
+
+---
+
+### Valid ValidationResult: blocked by VTZ
+
+```json
+{
+  "valid": false,
+  "errors": [
+    {
+      "code": "VTZ_POLICY_DENIED",
+      "message": "Action denied by VTZ policy."
+    }
   ],
-  "mirrored_to_local_test_workspace": true,
-  "source_root": ".",
-  "workspace_root": "/local/test/workspace"
+  "warnings": [],
+  "decision": {
+    "verdict": "block"
+  },
+  "trustflow_event": {
+    "event_id": "evt_4f1d6a0f4d6f4b5e8a8f5f8f7e6d3c2b",
+    "session_id": "session-456",
+    "ctx_id": "ctx_abc123",
+    "ts": 1712345678123,
+    "event_type": "block",
+    "payload_hash": "3f0a377ba0a4a460ecb616f6507ce0d8cfa3e704025d4b17d4cd6a1d8f8d235b"
+  },
+  "ctx_id_status": "valid"
 }
 ```
 
----
-
-### 3. Scaffold Mirror Operation Example
+### Invalid ValidationResult: claims valid with errors
 
 ```json
 {
-  "source_path": "tasklib/storage",
-  "destination_path": "/local/test/workspace/tasklib/storage",
-  "recursive": true,
-  "status": "mirrored"
+  "valid": true,
+  "errors": [
+    {
+      "code": "TITLE_EMPTY",
+      "message": "title must be non-empty",
+      "field": "title"
+    }
+  ],
+  "warnings": []
 }
 ```
 
----
-
-### 4. Model Module Contract Example
-
-```json
-{
-  "module_name": "tasklib.model",
-  "imports_resolvable_locally": true
-}
-```
+Reason:
+- `valid=true` is inconsistent with non-empty `errors`.
 
 ---
 
-### 5. Storage Module Contract Example
+## Integration Points
 
-```json
-{
-  "module_name": "tasklib.storage",
-  "depends_on_model": true,
-  "imports_resolvable_locally": true
-}
-```
+### CAL
 
----
+Validation subsystem integration requirements:
 
-### 6. CLI Module Contract Example
+- Every entry point that processes an agent action MUST call CTX-ID validation first.
+- No tool call, data read, API invocation, or agent handoff may execute before CAL policy evaluation.
+- CPF inspection MUST run synchronously within the enforcement path.
+- VTZ policy evaluation MUST occur before execution.
+- TrustFlow emission MUST occur for every action outcome.
 
-```json
-{
-  "module_name": "tasklib.cli",
-  "depends_on_storage": true,
-  "imports_resolvable_locally": true
-}
-```
-
----
-
-### 7. Documentation PR Merge Event Example
-
-```json
-{
-  "pr_type": "documentation",
-  "merged": true,
-  "recognized_by_downstream_prs": true
-}
-```
+#### Expected sequence
+1. Receive action payload.
+2. Validate `CTX-ID`.
+3. Reject immediately on CTX-ID failure.
+4. Run CPF:
+   - Tier 1 structural
+   - Tier 2 semantic
+   - Tier 3 behavioral
+5. Evaluate VTZ policy.
+6. If denied, produce `VTZEnforcementDecision` with `verdict=block`.
+7. Emit `TrustFlowEvent` synchronously.
+8. Surface any emission failure as WARN-level audit event.
+9. Only then allow downstream execution when permitted.
 
 ---
 
-### 8. Code PR Import Resolution Event Example
+### Task model
 
-```json
-{
-  "pr_type": "code",
-  "merged": true,
-  "resolves_imports_locally_before_ci": true
-}
-```
+Validation subsystem MUST validate task payloads against:
 
----
-
-### 9. Dependency Chain Status Example
-
-```json
-{
-  "docs_complete": true,
-  "scaffold_complete": true,
-  "model_complete": true,
-  "storage_complete": true,
-  "cli_complete": true,
-  "chain_closed": true
-}
-```
+- `id` auto-generated uniqueness requirement
+- non-empty `title`
+- enumerated `status`
+- numeric `created_at`
 
 ---
 
-## Non-Derivable Interfaces
+### CTX-ID / TrustLock
 
-The following interface details are not defined in the provided TRDs and are therefore intentionally unspecified in this document:
+Validation subsystem MUST support:
 
-- Task entity fields beyond existence of a task model
-- CRUD operation signatures
-- CLI commands, flags, arguments, or output schema
-- Storage backend type or persistence format
-- Error codes or exception schema
-- Authentication or authorization mechanisms
-- Network endpoints, HTTP routes, or RPC methods
-- Version negotiation or backward compatibility policy
-- Event bus, queue, or webhook payloads
+- required CTX-ID presence checks
+- immutable field handling after issuance
+- expiry rejection
+- TrustLock public key signature validation
+- rotation semantics where old token is invalidated immediately
 
 ---
 
-## Source Basis
+### VTZ enforcement plane
 
-This document is derived only from:
+Validation subsystem MUST enforce:
 
-- `TRD-TASKLIB`
-- the provided architecture context excerpt, which does not define additional `tasklib` interface contracts relevant to this library
+- exactly one VTZ binding per agent session at CTX-ID issuance
+- explicit authorization for cross-VTZ tool calls
+- deny-by-default for implicit cross-VTZ access
+- policy changes effective only at next CTX-ID issuance
 
-Where the TRD is silent, this document remains intentionally minimal.
+---
+
+### TrustFlow
+
+Validation subsystem MUST produce or validate events with exact required fields:
+
+- `event_id`
+- `session_id`
+- `ctx_id`
+- `ts`
+- `event_type`
+- `payload_hash`
+
+Emission requirements:
+
+- synchronous in enforcement path
+- no async buffering
+- no silent failure
+
+---
+
+### CPF
+
+Validation subsystem MUST expose validation hooks for all three CPF tiers:
+
+- structural validation
+- semantic classification
+- behavioral analysis
+
+All tiers MUST execute synchronously and fail closed.
