@@ -2,97 +2,193 @@
 
 ## What This Subsystem Does
 
-The Validation subsystem is a deliberately minimal Python task management library (`tasklib`) whose sole purpose is to prove that the Crafted Dev Agent build pipeline can close a complete dependency chain end-to-end. It is not a production system. It exercises the full pipeline from documentation through scaffold to working code, verifying that:
+The Validation subsystem exists to prove the Crafted Dev Agent pipeline end-to-end using the deliberately simple `tasklib` library defined in `TRD-TASKLIB`.
 
-- A documentation PR fires the merge gate and downstream PRs recognize the merge.
-- A scaffold PR with multiple package directories mirrors files to the local test workspace.
-- Code PRs that import from previously-merged PRs resolve those imports locally before CI.
-- The full dependency chain closes in order: **docs → scaffold → model → storage → CLI**.
+Its purpose is not to provide production-grade task management. It exists to validate that the full dependency chain can be closed through real merges and downstream consumption:
 
-Test quality is treated as equal to implementation quality. Tests must check behavior (e.g., a completed task no longer appears in `list_by_status("pending")`) rather than implementation internals.
+- documentation triggers the merge gate and downstream PRs recognize the merge
+- scaffold PRs with multiple package directories mirror files to the local test workspace
+- code PRs can import from previously merged PRs and resolve those imports locally before CI
+- the dependency chain completes in order: `docs → scaffold → model → storage → CLI`
+
+Within that validation objective, the subsystem covers:
+
+- a documentation set including `README`, `ARCHITECTURE` overview, and API reference
+- a Python package scaffold
+- a minimal task model
+- a storage layer for tasks
+- a CLI for manual interaction with the task store
+
+The CLI is explicitly intended for demonstration and validation, not production use.
 
 ## Component Boundaries
 
-The subsystem comprises three implementation layers and a documentation set, each scoped to its own pipeline stage:
+The Validation subsystem is bounded by the functionality specified in `TRD-TASKLIB` and should remain intentionally minimal.
 
-### Documentation Set
-- README, ARCHITECTURE overview, API reference.
-- First link in the dependency chain; its merge fires the gate for all downstream PRs.
+### Inside the subsystem
 
-### Task Model (`tasklib.model`)
-- Defines the task data structure.
-- No dependency on storage or CLI.
-- Specified by FR requirements in TRD-TASKLIB §3.1.
+- Documentation artifacts for the library
+- Python package scaffold
+- Task model
+- Task store
+- CLI runnable as a Python module
 
-### Task Store (`tasklib.storage`)
-- Provides in-memory task persistence and retrieval.
-- Depends on the Task Model.
-- Specified by FR requirements in TRD-TASKLIB §3.2.
+### Outside the subsystem
 
-### CLI (`tasklib.cli`)
-- Minimal command-line interface runnable as a Python module.
-- Supports three commands: `add`, `list`, `complete`.
-- **Must import its store from the storage layer** — it does not implement storage directly (FR-19).
-- Specified by FR requirements in TRD-TASKLIB §3.3 (FR-15 through FR-19).
+Per implementation guidance, the subsystem must not expand beyond what is specified. It should not introduce:
 
-### Decomposition Constraints
-- No more than **3 implementation files per PR**.
-- No more than **6 acceptance criteria per PR**.
-- If a natural decomposition exceeds these limits, the work must be split into a smaller scope before generating code.
+- extra error handling
+- logging
+- configuration
+- additional features beyond the documented requirements
+- direct storage logic inside the CLI
+
+### Internal boundary rules
+
+- The CLI consumes the storage layer; it does not implement storage directly.
+- Later stages depend on previously merged stages.
+- The subsystem should be decomposed so implementation work stays within:
+  - no more than 3 implementation files per PR
+  - no more than 6 acceptance criteria per PR
+
+These constraints are part of the validation design because the goal is to exercise merge ordering and dependency recognition across small, real increments.
 
 ## Data Flow
 
-```
-Documentation PR
-      │
-      ▼  (merge gate fires)
-Scaffold PR  ──►  creates package directories: tasklib/, tasklib/model/, tasklib/storage/, tasklib/cli/
-      │
-      ▼  (merge recognized by downstream)
-Task Model PR  ──►  tasklib.model defines task data structure
-      │
-      ▼  (import resolved locally before CI)
-Task Store PR  ──►  tasklib.storage imports from tasklib.model
-      │
-      ▼  (import resolved locally before CI)
-CLI PR  ──►  tasklib.cli imports store from tasklib.storage
-```
+The subsystem’s data flow follows the staged dependency chain defined in the TRD.
 
-Each stage depends on the prior stage's merge being visible. The pipeline validates that cross-PR imports resolve correctly at each link.
+### Build and merge flow
 
-Within the running library, runtime data flow is:
+1. Documentation is created and merged.
+2. Scaffold is created and merged.
+3. Model code is added against the scaffold.
+4. Storage code imports and uses the model.
+5. CLI code imports and uses the storage layer.
 
-```
-User (CLI command) → tasklib.cli → tasklib.storage → tasklib.model (task instances)
-```
+This ordering is required to validate that downstream PRs recognize prior merges and that local import resolution works before CI.
 
-- `add` command: CLI creates a task via the store, confirms creation.
-- `list` command: CLI queries the store for pending and in-progress tasks, displays them.
-- `complete` command: CLI marks a task as complete via the store using a task identifier, confirms completion.
+### Runtime flow
+
+For manual task interaction:
+
+1. The CLI is invoked as a Python module.
+2. A CLI command is selected:
+   - `add`
+   - `list`
+   - `complete`
+3. The CLI calls into the task store.
+4. The task store reads or updates task state.
+5. The CLI reports the result to the user.
+
+### Command-specific flow
+
+- `add`
+  - accepts a title
+  - creates a task through the store
+  - confirms the created task
+
+- `list`
+  - retrieves tasks from the store
+  - displays all tasks whose status is `pending` or `in-progress`
+
+- `complete`
+  - accepts a task identifier
+  - marks the task complete through the store
+  - confirms completion
 
 ## Key Invariants
 
-1. **Dependency chain must be linear and complete.** The chain docs → scaffold → model → storage → CLI must close with no skipped links. Each PR depends on the merge of its predecessor.
-2. **Storage is the single source of task state.** The CLI must never implement storage directly; it must import from the storage layer (FR-19).
-3. **No feature creep.** The library must not include error handling, logging, configuration, or features beyond what TRD-TASKLIB specifies. The goal is the simplest possible codebase that exercises the full pipeline.
-4. **Behavioral tests only.** Tests assert on observable behavior, not implementation details.
-5. **Specification is complete.** There are no open questions by design. Ambiguity would undermine the validation purpose.
-6. **Fail closed on trust and policy operations.** Per Forge platform invariants, all failures involving trust, identity, policy, or cryptography fail closed. No silent failure paths exist.
+The Validation subsystem enforces the following invariants derived from the TRD and injected architecture context.
+
+### Validation invariants
+
+- The subsystem remains intentionally minimal.
+- The implementation must not add unspecified features.
+- The dependency chain must close in the defined order:
+  - `docs → scaffold → model → storage → CLI`
+- The CLI must import its store from the storage layer.
+- The CLI must be runnable as a Python module.
+- The `list` command displays only `pending` and `in-progress` tasks.
+- Behavior-oriented validation is preferred over implementation-detail testing.
+
+### Process invariants
+
+- Work must be decomposed into small PRs.
+- Each PR must contain no more than 3 implementation files.
+- Each PR must contain no more than 6 acceptance criteria.
+
+### Global architecture invariants from injected context
+
+These are broader architectural constraints that apply wherever relevant:
+
+- trust is never inferred implicitly; it is asserted and verified explicitly
+- failures involving trust, identity, policy, or cryptography fail closed
+- there are no silent failure paths
+- sensitive operations are authenticated, authorized, and auditable
+
+The provided TRD does not define trust, identity, policy, or cryptographic mechanisms for `tasklib`, so these invariants serve as ambient architectural constraints rather than introducing new functional scope.
 
 ## Failure Modes
 
-| Failure | Behavior | Rationale |
-|---|---|---|
-| Downstream PR submitted before upstream merge is visible | PR must not proceed; import resolution fails before CI | Validates merge-gate propagation |
-| Scaffold PR does not mirror expected directories to local test workspace | Subsequent PRs cannot locate package paths; build fails | Validates workspace mirroring |
-| CLI imports storage implementation directly (bypasses `tasklib.storage`) | Violates FR-19; must be rejected at review | Enforces layered dependency |
-| PR exceeds 3 implementation files or 6 acceptance criteria | Must be split before code generation | Enforces decomposition constraints from §6 |
-| Any trust or policy check failure in the pipeline | Fail closed; no silent pass-through | Forge platform invariant |
+The subsystem is designed to detect validation failures in pipeline construction and dependency closure.
+
+### Pipeline validation failures
+
+- A documentation PR does not trigger the merge gate correctly.
+- Downstream PRs do not recognize an upstream merge.
+- Scaffold files do not mirror to the local test workspace.
+- A code PR cannot resolve imports from previously merged PRs before CI.
+- The dependency chain does not close from documentation through CLI.
+
+### Functional failures
+
+- The CLI cannot run as a Python module.
+- The `add` command does not accept a title or does not confirm task creation.
+- The `list` command fails to display all `pending` and `in-progress` tasks.
+- The `complete` command does not accept a task identifier or does not confirm completion.
+- The CLI bypasses the storage layer and implements storage directly.
+
+### Constraint violations
+
+- The implementation introduces non-required functionality.
+- A PR exceeds the limit of 3 implementation files.
+- A PR exceeds the limit of 6 acceptance criteria.
+- Tests validate implementation details instead of behavior.
+
+### Architectural handling expectations
+
+From the injected architecture context, relevant failures should not be silent and should fail closed where trust, identity, policy, or cryptographic concerns apply. The TRD does not define such mechanisms for this subsystem, so no additional enforcement components are introduced here.
 
 ## Dependencies
 
-- **Upstream:** Crafted Dev Agent merge-gate infrastructure (provides PR lifecycle, merge detection, workspace mirroring).
-- **Internal (linear):**
-  - `tasklib.cli` → `tasklib.storage` → `tasklib.model`
-- **External:** Python standard library only. No third-party packages are specified or permitted.
-- **Platform:** Forge platform invariants apply — trust is never inferred implicitly, all failures fail closed, no silent failure paths.
+The subsystem dependency structure is explicitly linear and must remain so for validation purposes.
+
+### Primary dependency chain
+
+- Documentation
+- Scaffold
+- Model
+- Storage
+- CLI
+
+### Component dependency rules
+
+- Storage depends on the model.
+- CLI depends on storage.
+- CLI must import the store from the storage layer.
+
+### Environmental dependency assumptions
+
+- Python execution environment capable of running the CLI as a module
+- Local workspace setup that mirrors scaffold PR files
+- Merge and PR flow capable of demonstrating downstream recognition of prior merges
+- Local import resolution before CI for code PR validation
+
+### Non-dependencies
+
+The subsystem should not depend on additional production concerns not specified in the TRD, including:
+
+- logging frameworks
+- configuration systems
+- expanded error-management infrastructure
+- extra service layers beyond model, storage, and CLI
