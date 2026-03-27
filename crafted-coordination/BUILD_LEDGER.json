@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, comprising a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore with add/get/list/complete/delete operations (FR-8 through FR-14), and a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), with a package root re-exporting the public API (FR-20). The full dependency chain must close in order: docs \u2192 scaffold \u2192 task model \u2192 storage \u2192 CLI, validating that the Crafted Dev Agent build pipeline can resolve merge gates and cross-PR import dependencies end-to-end.\n\nOperator on 'TRD-TASKLIB Section 6 limits PRs to 3 implementation files a':\nit is okay to combine\n\nOperator on 'FR-1 specifies 'a unique identifier generated automatically ':\nuse whatever makes sense for the task\n\nOperator on 'Section 5 acceptance criteria require tests (e.g., serializa':\nSection 5 acceptance criteria require tests (e.g., serialization round-trip, KeyError on missing complete, creation-order listing) \u2014 should tests be co-located in a tests/ directory mirroring the src/ layout, and should they be included in the same PR as their corresponding implementation or in a separate testing PR?\n\nOperator on 'The CLI (FR-15) must be 'runnable as a Python module' \u2014 shou':\nthe CLI must be invocable from the command line you decide the mechanism",
   "created_at": 1774631794.7817879,
-  "updated_at": 1774633258.10923,
+  "updated_at": 1774638057.898632,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -63,10 +63,10 @@
       "branch": "",
       "status": "done",
       "engineer_id": "",
-      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/2",
+      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/3",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": 1774632443.119095,
+      "completed_at": 1774638057.898622,
       "depends_on_prs": [],
       "retry_count": 0,
       "failure_summary": "",
@@ -119,7 +119,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 4,
+  "version": 5,
   "schema_version": 3,
   "agent_version": "39.75.0"
 }
