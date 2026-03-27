@@ -4,15 +4,17 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, comprising a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore with add/get/list/complete/delete operations (FR-8 through FR-14), and a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), with a package root re-exporting the public API (FR-20). The full dependency chain must close in order: docs \u2192 scaffold \u2192 task model \u2192 storage \u2192 CLI, validating that the Crafted Dev Agent build pipeline can resolve merge gates and cross-PR import dependencies end-to-end.\n\nOperator on 'TRD-TASKLIB Section 6 limits PRs to 3 implementation files a':\nit is okay to combine\n\nOperator on 'FR-1 specifies 'a unique identifier generated automatically ':\nuse whatever makes sense for the task\n\nOperator on 'Section 5 acceptance criteria require tests (e.g., serializa':\nSection 5 acceptance criteria require tests (e.g., serialization round-trip, KeyError on missing complete, creation-order listing) \u2014 should tests be co-located in a tests/ directory mirroring the src/ layout, and should they be included in the same PR as their corresponding implementation or in a separate testing PR?\n\nOperator on 'The CLI (FR-15) must be 'runnable as a Python module' \u2014 shou':\nthe CLI must be invocable from the command line you decide the mechanism",
   "created_at": 1774631794.7817879,
-  "updated_at": 1774631794.781824,
+  "updated_at": 1774632022.4874518,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
       "prd_id": "PRD-001",
       "title": "Documentation Set: README, ARCHITECTURE, and API Reference",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
-      "pr_ids": []
+      "pr_ids": [
+        1
+      ]
     },
     {
       "prd_id": "PRD-002",
@@ -50,9 +52,39 @@
       "pr_ids": []
     }
   ],
-  "pr_entries": {},
+  "pr_entries": {
+    "1": {
+      "prd_id": "PRD-001",
+      "pr_num": 1,
+      "title": "Add tasklib documentation set: README, ARCHITECTURE, and API reference",
+      "branch": "",
+      "status": "available",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Creates the three foundational markdown documents that define tasklib's purpose, layered architecture, package layout, and complete public API surface. README.md covers library purpose, scope, quickstart, and intended audience. ARCHITECTURE.md describes the three-layer architecture (model \u2192 storage \u2192 CLI), package directory structure, and inter-layer dependency rules. API.md documents every public type (Task, TaskStatus), every InMemoryTaskStore method (add/get/list/complete/delete), all Task fields, and all CLI commands (add/list/complete) with signatures and behavior. No Python code is introduced.",
+      "impl_files": [
+        "README.md",
+        "ARCHITECTURE.md",
+        "API.md"
+      ],
+      "test_files": [],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    }
+  },
   "knowledge_notes": [],
-  "version": 1,
+  "version": 2,
   "schema_version": 3,
   "agent_version": "39.75.0"
 }
