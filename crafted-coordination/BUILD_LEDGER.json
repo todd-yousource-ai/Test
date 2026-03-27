@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, comprising a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore with add/get/list/complete/delete operations (FR-8 through FR-14), and a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), with a package root re-exporting the public API (FR-20). The full dependency chain must close in order: docs \u2192 scaffold \u2192 task model \u2192 storage \u2192 CLI, validating that the Crafted Dev Agent build pipeline can resolve merge gates and cross-PR import dependencies end-to-end.\n\nOperator on 'TRD-TASKLIB Section 6 limits PRs to 3 implementation files a':\nit is okay to combine\n\nOperator on 'FR-1 specifies 'a unique identifier generated automatically ':\nuse whatever makes sense for the task\n\nOperator on 'Section 5 acceptance criteria require tests (e.g., serializa':\nSection 5 acceptance criteria require tests (e.g., serialization round-trip, KeyError on missing complete, creation-order listing) \u2014 should tests be co-located in a tests/ directory mirroring the src/ layout, and should they be included in the same PR as their corresponding implementation or in a separate testing PR?\n\nOperator on 'The CLI (FR-15) must be 'runnable as a Python module' \u2014 shou':\nthe CLI must be invocable from the command line you decide the mechanism",
   "created_at": 1774631794.7817879,
-  "updated_at": 1774638057.898632,
+  "updated_at": 1774640315.667927,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -29,9 +29,13 @@
     {
       "prd_id": "PRD-003",
       "title": "Task Dataclass and TaskStatus Enumeration with Tests",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
-      "pr_ids": []
+      "pr_ids": [
+        1,
+        2,
+        3
+      ]
     },
     {
       "prd_id": "PRD-004",
@@ -71,16 +75,15 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "crafted-coordination/impl-journal/PR-001.md",
-      "summary": "Creates the complete Python package directory tree under src/tasklib/ as specified by PRD-002. This includes the root package src/tasklib/__init__.py, subpackages src/tasklib/models/__init__.py and src/tasklib/storage/__init__.py, and placeholder module files src/tasklib/models/task.py, src/tasklib/storage/store.py, and src/tasklib/cli.py. Every __init__.py and placeholder module contains only a module-level docstring \u2014 no imports, no assignments, no executable statements.",
+      "summary": "Creates the minimal Python package directory structure under src/tasklib with models subpackage plus test package skeletons. All __init__.py files are empty placeholders \u2014 no domain logic, no config, no docs.",
       "impl_files": [
         "src/tasklib/__init__.py",
-        "src/tasklib/models/__init__.py",
-        "src/tasklib/models/task.py",
-        "src/tasklib/storage/__init__.py",
-        "src/tasklib/storage/store.py",
-        "src/tasklib/cli.py"
+        "src/tasklib/models/__init__.py"
       ],
-      "test_files": [],
+      "test_files": [
+        "tests/__init__.py",
+        "tests/models/__init__.py"
+      ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
@@ -105,21 +108,51 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Validates that the scaffold from PR-1 meets all PRD-002 acceptance criteria. Tests verify: (1) tasklib, tasklib.models, and tasklib.storage are importable without error, (2) all six placeholder modules are importable, (3) AST inspection confirms every __init__.py and placeholder module contains only a module-level docstring with no imports, assignments, or executable statements, (4) importing any package produces no stdout/stderr output.",
+      "summary": "Creates src/tasklib/models/task.py containing the TaskStatus enum (PENDING, IN_PROGRESS, DONE) and the Task dataclass. Task auto-generates a uuid4 string ID and float creation timestamp, enforces non-empty title via ValueError at construction, defaults status to PENDING, rejects invalid status values, and provides to_dict/from_dict serialization round-trip. Updates src/tasklib/models/__init__.py to re-export Task and TaskStatus as the public model surface.",
+      "impl_files": [
+        "src/tasklib/models/task.py",
+        "src/tasklib/models/__init__.py"
+      ],
+      "test_files": [],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "3": {
+      "prd_id": "PRD-003",
+      "pr_num": 3,
+      "title": "Tests for Task dataclass and TaskStatus enumeration",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        2
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Adds tests/models/test_task.py with comprehensive test coverage: verifies auto-generated unique IDs across instances, validates ValueError on empty/whitespace/non-string title, confirms default status is PENDING, rejects invalid status values, verifies automatic creation timestamp is a positive float, and asserts to_dict/from_dict serialization round-trip fidelity (all fields survive the cycle with identical values and types).",
       "impl_files": [],
       "test_files": [
-        "tests/test_scaffold.py"
+        "tests/models/test_task.py"
       ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
-      "estimated_complexity": "low",
+      "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
     }
   },
   "knowledge_notes": [],
-  "version": 5,
+  "version": 6,
   "schema_version": 3,
   "agent_version": "39.75.0"
 }
