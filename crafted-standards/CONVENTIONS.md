@@ -1,83 +1,147 @@
-# CONVENTIONS.md — Validation Subsystem
+# Code Conventions
 
----
+## File and Directory Naming
 
-## Code Conventions
+1. Place Validation subsystem source files under `src/` using a dedicated validation package path, and keep every module filename lowercase with underscores only.  
+   - Valid: `src/validation/rules.py`, `src/validation/errors.py`
+   - Invalid: `src/Validation/Rules.py`, `src/validation/validationRules.py`
 
-### File and Directory Naming
+2. Mirror Validation source modules in tests under `tests/validation/` using the exact component name prefixed with `test_`.  
+   - If source file is `src/validation/rules.py`, test file must be `tests/validation/test_rules.py`.
 
-1. All validation source files must reside under `src/vtz/` following the pattern `src/vtz/<component>.py`.
-2. All validation test files must mirror the source tree under `tests/vtz/` following the pattern `tests/vtz/test_<component>.py`.
-3. File names must use lowercase `snake_case` exclusively. No hyphens, no camelCase, no uppercase letters in file or directory names.
-4. Each validation concern (e.g., schema validation, field validation, status validation) must occupy its own module file. Do not combine unrelated validation logic in a single file.
-5. The package root `src/vtz/__init__.py` must re-export the subsystem's public API classes and functions at the top level so consumers can import directly from `vtz` without knowing internal module structure.
+3. Keep the package root file limited to public API re-exports. If the Validation subsystem exposes public classes or functions, re-export them from `src/validation/__init__.py`.
 
----
+4. Do not encode implementation details in filenames. Name files by responsibility, not by usage context.  
+   - Use `validator.py`, `result.py`, `exceptions.py`  
+   - Do not use `misc.py`, `helpers.py`, `stuff.py`
 
-### Class and Function Naming
+5. Separate distinct responsibilities into separate modules.  
+   - Put exception types in `exceptions.py` or `errors.py`.
+   - Put validation result models in `result.py`.
+   - Put rule logic in `rules.py` or a clearly scoped rule module.
 
-6. Classes must use `PascalCase` (e.g., `FieldValidator`, `StatusValidationError`).
-7. Functions and methods must use `snake_case` (e.g., `validate_status`, `check_required_fields`).
-8. Validator classes must be suffixed with `Validator` (e.g., `TaskFieldValidator`, `SchemaValidator`).
-9. Validation functions that return a boolean must be prefixed with `is_` or `has_` (e.g., `is_valid_status`, `has_required_fields`).
-10. Validation functions that raise on failure must be prefixed with `validate_` or `check_` (e.g., `validate_task_data`, `check_status_transition`).
-11. Constants must use `UPPER_SNAKE_CASE` and be defined at module level (e.g., `MAX_TITLE_LENGTH`, `REQUIRED_FIELDS`).
+## Class and Function Naming
 
----
+1. Name classes in `PascalCase`.  
+   - Valid: `Validator`, `ValidationResult`, `ValidationError`
+   - Invalid: `validator`, `validation_result`
 
-### Error and Exception Patterns
+2. Name functions and methods in `snake_case`.  
+   - Valid: `validate_input`, `is_valid`, `collect_errors`
+   - Invalid: `validateInput`, `IsValid`
 
-12. All validation exceptions must inherit from a single base exception class named `ValidationError`, defined in `src/vtz/exceptions.py`.
-13. Each distinct validation failure category must have its own exception subclass (e.g., `FieldValidationError`, `StatusValidationError`, `SchemaValidationError`).
-14. Every exception instance must carry a human-readable `message` attribute and a machine-readable `code` string attribute (e.g., `code="MISSING_REQUIRED_FIELD"`).
-15. Validation functions must never catch and silently swallow exceptions. If a validation step fails, either raise the appropriate `ValidationError` subclass or return a structured error result—never return `None` to signal failure.
-16. When multiple validation errors are detected in a single pass, collect them into a list and raise a `ValidationError` whose `errors` attribute contains all individual error objects. Do not short-circuit on the first failure unless explicitly documented.
+3. Name boolean-returning functions and methods with an `is_`, `has_`, or `can_` prefix when the return type is strictly boolean.  
+   - Valid: `is_valid()`, `has_errors()`
 
----
+4. Name exception classes with an `Error` suffix.  
+   - Valid: `ValidationError`, `RuleConfigurationError`
 
-### Import and Module Organisation
+5. Use singular names for classes representing one validator or one rule, and plural names only for collections or registries.  
+   - Valid: `Rule`, `Validator`, `RuleSet`
+   - Invalid: `Rules` for a single rule object
 
-17. Only Python standard library modules may be imported. Zero external dependencies are permitted (NFR-1).
-18. All modules must be importable without side effects. Module-level code must be limited to class definitions, function definitions, constant assignments, and imports. No I/O, no computation, no registration calls at import time (NFR-2).
-19. Intra-subsystem imports must use explicit relative imports (e.g., `from .exceptions import ValidationError`).
-20. Cross-subsystem imports must use absolute imports rooted at `src` (e.g., `from tasklib import Task`).
-21. Status values must be referenced exclusively via their enumeration members throughout all validation code. Hard-coded status strings (magic strings) are forbidden (NFR-4). Example: use `TaskStatus.COMPLETE`, never the string `"complete"`.
-22. Import statements must be grouped in the standard order: (1) standard library, (2) cross-subsystem absolute imports, (3) intra-subsystem relative imports—separated by a single blank line between each group.
+6. If the subsystem defines public API classes or functions, ensure each public name is stable enough to be re-exported from the package root without exposing internal module structure.
 
----
+7. Do not use magic string status-like values inside validation flows. If the subsystem defines validation states, outcomes, or severities, represent them with an enumeration and reference the enum everywhere in code.
 
-### Comment and Documentation Rules
+## Error and Exception Patterns
 
-23. Every public class, method, and function must have a docstring describing its purpose, parameters, return value, and exceptions raised (NFR-3).
-24. Docstrings must follow the format:
-    ```python
-    def validate_status(status: TaskStatus) -> bool:
-        """Check whether the given status is a valid TaskStatus member.
+1. Define Validation-specific exceptions in a dedicated module such as `src/validation/exceptions.py` or `src/validation/errors.py`.
 
-        Args:
-            status: The status value to validate.
+2. Raise typed exceptions, not generic `Exception`.  
+   - Valid: `raise ValidationError("field 'id' is required")`
+   - Invalid: `raise Exception("bad input")`
 
-        Returns:
-            True if the status is valid.
+3. Use one exception type per failure category.  
+   - Input data invalid: `ValidationError`
+   - Invalid validator/rule setup: `RuleConfigurationError`
+   - Do not reuse one broad exception for unrelated failures.
 
-        Raises:
-            StatusValidationError: If the status is not a recognised member.
-        """
-    ```
-25. Inline comments must explain *why*, not *what*. Do not restate the code in English.
-26. TODO comments must include a tracking reference (e.g., `# TODO(VTZ-42): support custom status enums`).
-27. Private helpers (prefixed with `_`) must still carry a one-line docstring.
+4. Make exception messages concrete and actionable by including the invalid field, rule, or value.  
+   - Valid: `"field 'email' must not be empty"`
+   - Invalid: `"validation failed"`
 
----
+5. Do not trigger exceptions at module import time. All validation checks that can fail must run inside callable code paths only.
 
-### Validation-Specific Patterns
+6. If validation returns structured failures instead of raising immediately, use a dedicated result type and reserve exceptions for programmer errors, invalid configuration, or unrecoverable misuse.
 
-28. Every validator must implement a callable interface with the signature `validate(data) -> ValidationResult` or raise a `ValidationError`. Do not mix return-based and exception-based signalling within the same validator class.
-29. `ValidationResult` must be a dataclass (or named tuple) with at minimum two fields: `is_valid: bool` and `errors: list[ValidationError]`.
-30. Status validation must always resolve status values through the project's status enumeration. Any comparison against a raw string must be flagged as a defect.
-31. Validators must be stateless. All inputs must be passed as arguments; no validator may cache prior results or mutate shared state.
-32. Composite validation (running multiple validators in sequence) must be implemented through a `ValidationPipeline` class that accepts an ordered list of validators and executes them in sequence, aggregating all `ValidationError` instances before returning or raising.
-33. Field-level validators must declare which field(s) they validate via a `fields` class attribute (a tuple of field name strings). This enables introspection and pipeline composition.
-34. Boundary values (e.g., max lengths, allowed ranges) must be defined as module-level constants, never as inline literals inside validation logic.
-35. Every validation rule must have a corresponding unit test in `tests/vtz/test_<component>.py` covering at minimum: one valid input, one invalid input, and one edge-case input.
-36. Validators must not perform type coercion. If the input type is wrong, raise `FieldValidationError` with a message identifying the expected type. Validation observes; it does not transform.
+## Import and Module Organisation
+
+1. Use only Python standard library imports. Do not add third-party packages anywhere in the Validation subsystem.
+
+2. Keep all modules importable without side effects. At import time, modules may only define constants, enums, classes, and functions.  
+   - Do not open files
+   - Do not read environment variables for execution
+   - Do not register runtime hooks
+   - Do not run validation logic
+
+3. Group imports in this order:
+   1. Standard library imports
+   2. Local package imports
+
+4. Use explicit imports for public API symbols.  
+   - In `src/validation/__init__.py`, re-export public names directly:
+     ```python
+     from .validator import Validator
+     from .result import ValidationResult
+     ```
+
+5. Keep internal modules internal. Only names intended for consumers may be re-exported from the package root.
+
+6. Avoid circular imports by placing shared enums, protocols, or common result types in a dedicated low-level module such as `types.py`, `enums.py`, or `result.py`.
+
+7. Do not require consumers to know internal module structure for core Validation API types. If a class or function is part of the public API, it must be importable from the package root.
+
+## Comment and Documentation Rules
+
+1. Every public class must have a docstring describing its purpose.
+
+2. Every public function must have a docstring describing its purpose.
+
+3. Write docstrings as purpose-first descriptions.  
+   - Valid: `"""Validate input data against the configured rules."""`
+   - Invalid: `"""Function for validation."""`
+
+4. Add comments only where code intent is not obvious from names and structure. Do not restate the code line-by-line.
+
+5. When a validation rule depends on a specific invariant, document that invariant in the class or function docstring.
+
+6. If a module defines public API types, add a module docstring summarizing the responsibility of that module.
+
+7. Do not use comments as a substitute for proper naming. Rename unclear variables, functions, or classes instead of explaining poor names in comments.
+
+## Validation-Specific Patterns
+
+1. Represent validation outcomes, severities, or statuses with an `Enum` and use that enum throughout the subsystem.  
+   - Valid: `ValidationStatus.VALID`
+   - Invalid: `"valid"`
+
+2. Centralize shared validation enums in a dedicated module so all rules and validators reference the same definitions.
+
+3. Return structured validation data from validators when multiple issues can be reported. Use a dedicated result object such as `ValidationResult` instead of returning mixed tuples, ad hoc dicts, or string lists.
+
+4. Store individual validation issues in a dedicated type when issue details matter. Include named attributes for at least the rule or field and the message when those concepts exist.
+
+5. Keep rule evaluation pure where possible: a rule method should inspect provided input and return or record findings without mutating unrelated global or module state.
+
+6. Pass all required context into validation functions explicitly through parameters. Do not rely on import-time configuration or hidden module-level state.
+
+7. Separate rule definition from rule execution.  
+   - Rule classes/functions define validation logic.
+   - Validator classes/functions orchestrate applying rules and collecting results.
+
+8. When validation supports multiple rules, process them through a collection owned by the validator or rule set object rather than hard-coding scattered checks across unrelated modules.
+
+9. Use deterministic output ordering for collected validation issues. If multiple errors are returned, preserve rule application order or another explicitly defined stable order.
+
+10. If a validation rule checks against a fixed set of allowed values, define those values once as an enum or named constant collection in module scope. Do not repeat literal values across functions.
+
+11. Keep package-root exports aligned with the intended public Validation API. Any public validator, result type, or core exception intended for consumers must be re-exported from `src/validation/__init__.py`.
+
+12. Do not expose internal-only helper functions as public API. Prefix internal helpers with `_` and keep them out of package-root re-exports.
+
+13. Ensure every public Validation API type is usable by importing directly from the subsystem package root.  
+   - Target usage:
+     ```python
+     from validation import Validator, ValidationResult
+     ```
