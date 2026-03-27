@@ -1,43 +1,91 @@
 # CLAUDE.md
 
-Forge is a runtime policy enforcement and cryptographic identity platform for enterprise AI agents that enforces agent execution below the application stack through explicit trust assertion, CTX-ID validation, VTZ policy enforcement, DTL labeling, and synchronous TrustFlow audit emission. This repository currently implements `tasklib`, a validation library that proves the Crafted Dev Agent build pipeline closes a complete dependency chain from documentation through scaffold to working code.
+Forge is a runtime policy enforcement and cryptographic identity platform for enterprise AI agents that enforces agent execution below the application stack through cryptographic identity, operator-defined policy, and auditable runtime controls.
 
 ## Critical Rules - Read Before Writing Any Code
 
-1. Validate `ctx_id` at every CAL enforcement entry point BEFORE any other processing occurs; validation failure means immediate rejection with zero partial processing.
-2. Reject immediately on CTX-ID validation failure and perform no partial processing; never silently continue.
-3. Check every action against VTZ policy before execution and emit a `VTZEnforcementDecision` with `verdict=block` on denial.
-4. Emit a TrustFlow event synchronously in the enforcement path for every action outcome (allow, restrict, block) using fields: `event_id`, `session_id`, `ctx_id`, `ts`, `event_type`, `payload_hash`, and `sig`. Async buffering is forbidden.
-5. Never silently continue when TrustFlow emission fails; log and surface the failure as a WARN-level audit event.
-6. Treat missing CTX-ID as `UNTRUSTED` and never infer identity from session context, tool context, or caller metadata. Expired CTX-ID must be rejected.
-7. CTX-ID tokens are immutable once issued; no field modification is permitted after issuance.
-8. All failures involving trust, identity, policy, or cryptography must fail closed — reject the action, log the event, surface to caller, never silently continue.
-9. Never log, embed in error messages, or include in generated code any secrets, keys, tokens, credentials, or cleartext payloads.
-10. VTZ boundaries are structural, not advisory — application code cannot bypass enforcement; cross-VTZ tool calls require explicit policy authorization.
-11. DTL labels are immutable after assignment at data ingestion; derived data inherits the HIGHEST classification of any source; unlabeled data is CONFIDENTIAL until explicitly reclassified.
-12. All external input is untrusted and must be validated strictly with bounds-checked parsing that fails safely.
-13. `try/except/pass` is BANNED in any enforcement path — every exception must be caught, logged with structured context, and surfaced.
-14. Audit records must be generated BEFORE execution, are append-only, and must never contain secrets or cleartext sensitive data.
-15. `tasklib` must have zero dependencies outside the Python standard library — no third-party packages.
-16. Keep `tasklib` intentionally minimal — no logging, configuration, persistence, authentication, or extra features not specified in `TRD-TASKLIB`.
-17. Preserve the required `tasklib` dependency chain: docs → scaffold → model → storage → CLI, with no circular imports.
-18. `tasklib` implementation files must not exceed 3 per PR and 6 acceptance criteria per PR; split before generating code if either limit would be exceeded.
+### Identity & Enforcement
 
-## tasklib Domain Rules
+1. Validate `ctx_id` at every CAL enforcement entry point before any action processing — validation failure means immediate rejection with zero partial processing.
+2. Treat missing `ctx_id` as `UNTRUSTED` — never infer identity from session context, caller context, or application state.
+3. `CTX-ID` tokens are IMMUTABLE once issued — modification after issuance is a security violation; rotation creates a new token and invalidates the old one immediately.
+4. Bind every agent session to exactly one VTZ at `CTX-ID` issuance — deny implicit cross-VTZ calls by default.
+5. Check every action against VTZ policy BEFORE execution — never execute first. Use `VTZEnforcementDecision.verdict` values exactly as `allow|restrict|block`; never invent or weaken these values.
+6. Fail closed on every trust, identity, policy, and cryptographic failure — reject the action, log the event, surface to caller.
 
-1. Implement `TaskStatus` as an enumeration with exactly three members: `pending`, `in_progress`, and `done`. Never use free-form status strings.
-2. Implement `Task` as a self-contained dataclass carrying these fields: `identifier` (str), `title` (str), `status` (TaskStatus), and `created_at` (numeric timestamp).
-3. `title` is required and must be non-empty at task creation time; raise `ValueError` if empty or missing.
-4. Default new `Task` instances to `status=TaskStatus.pending` and record `created_at` as a numeric timestamp (seconds since epoch).
+### Audit & Data Trust
+
+7. Emit a synchronous TrustFlow event for every action outcome (`allow`, `restrict`, `block`) — async buffering is forbidden in enforcement paths.
+8. Never silently continue when TrustFlow emission fails — log and surface the failure immediately.
+9. Audit records are APPEND-ONLY — no modification, no deletion; audit failures are non-fatal but MUST be surfaced immediately.
+10. DTL labels are assigned at DATA INGESTION and are immutable — unlabeled data MUST be treated as CONFIDENTIAL until explicitly reclassified. Never allow label stripping without audit.
+
+### Code Quality & Security
+
+11. `try/except/pass` is BANNED in any enforcement code path — no swallowed exceptions, no silent continues, anywhere.
+12. Never log or return secrets, keys, tokens, credentials, or cleartext sensitive payloads.
+13. Treat all external input as untrusted — validate strictly, bounds-check all parsing, fail safely on malformed data.
+14. Tests MUST NOT mock the enforcement decision logic — external calls may be mocked but enforcement logic must execute.
+15. No more than 3 implementation files per PR and no more than 6 acceptance criteria per PR — split before exceeding.
+
+### tasklib-Specific Rules
+
+16. No dependency outside the Python standard library is permitted for `tasklib`.
+17. Do not add persistence, authentication, multi-user behavior, configuration systems, logging, or speculative abstractions beyond the TRD.
+18. Preserve the TRD-TASKLIB dependency chain exactly: `docs → scaffold → model → storage → CLI`.
+19. Implement `TaskStatus` as an enumeration with exactly three members: `pending`, `in_progress`, and `done` — never use free-form status strings.
+20. For the current task (model tests), test behavior of `Task` and `TaskStatus` directly — do not couple tests to storage or CLI concerns.
 
 ## Architecture Overview
 
-| Subsystem | Path | Enforces | Must NOT do |
-|---|---|---|---|
-| **CAL** (Conversation Abstraction Layer) | `src/cal/` | Agent action processing; calls CTX-ID validation first on every entry point | Must not process any action before identity validation and VTZ policy checks complete |
-| **CPF** (Conversation Plane Filter) | Within `src/cal/` | Three-tier inspection: Tier 1 structural validation, Tier 2 semantic classification | Must not skip tiers, reorder inspection sequence, or bypass bounds checks or policy linkage |
-| **VTZ** (Virtual Trust Zone) | `src/vtz/` | Binds each agent session to exactly one VTZ; enforces structural boundaries on tool calls | Must not permit implicit cross-VTZ tool calls |
-| **TrustLock** | `src/trustlock/` | TPM-anchored cryptographic machine identity; CTX-ID issuance and signature validation against TrustLock public key | Must not perform software-only trust substitution; must not allow CTX-ID field modification after issuance |
-| **DTL** (Data Trust Labels) | `src/dtl/` | Data Trust Label issuance and verification; immutable labels assigned at ingestion | Must not allow label mutation after assignment; must not allow derived data to carry a lower classification than any source |
-| **TrustFlow** | `src/trustflow/` | Synchronous audit event emission for every enforcement decision | Must not buffer events asynchronously; must not omit required fields (`event_id`, `session_id`, `ctx_id`, `ts`, `event_type`, `payload_hash`, `sig`) |
-| **tasklib** | `src/tasklib/` | Validation library proving the build pipeline dependency chain (docs → scaffold → model → storage → CLI) | Must not import third-party packages; must not add features beyond TRD-TASKLIB specification |
+
+src/
+  cal/           — Conversation Abstraction Layer enforcement entry points.
+                   MUST validate ctx_id first.
+                   MUST NOT execute actions before identity and policy checks.
+                   MUST NOT make policy decisions — delegates to VTZ.
+  cal/cpf/       — Conversation Plane Filter. Three-tier inspection:
+                   (1) structural validation, (2) semantic classification.
+                   MUST NOT skip tiers. MUST NOT bypass CAL enforcement order.
+  dtl/           — Data Trust Labels. Assigns and enforces classification
+                   labels at ingestion. MUST NOT allow label stripping without audit.
+  trustflow/     — TrustFlow audit stream. Emits immutable, signed audit events.
+                   MUST NOT buffer asynchronously in enforcement paths.
+  vtz/           — Virtual Trust Zone enforcement. Evaluates policy and returns
+                   verdict (allow|restrict|block) via VTZEnforcementDecision.verdict.
+                   MUST NOT be bypassed by application code.
+                   MUST NOT allow implicit cross-VTZ tool calls.
+  trustlock/     — Cryptographic machine identity (TPM-anchored). Issues and
+                   validates CTX-ID via TrustLock public key. MUST verify token
+                   authenticity and expiry. MUST NOT accept software-only validation.
+  mcp/           — MCP Policy Engine. Defines and distributes operator policy.
+                   MUST NOT execute actions — policy definition and distribution only.
+
+
+## tasklib Architecture
+
+
+tasklib/
+  models.py      — Task dataclass and TaskStatus enumeration (current focus).
+  storage.py     — In-memory task storage (future PR, depends on models).
+  cli.py         — Command-line interface (future PR, depends on storage).
+
+
+### Task Model Contract
+
+- `TaskStatus` enum: members are `pending`, `in_progress`, `done` — no other values.
+- `Task` dataclass fields:
+  - `id`: `str` — unique task identifier.
+  - `title`: `str` — human-readable task title; must not be empty.
+  - `description`: `str` — task description; defaults to empty string.
+  - `status`: `TaskStatus` — defaults to `TaskStatus.pending`.
+- `Task` is a pure data object with no side effects, no I/O, no persistence logic.
+
+### Current Task: Model Tests
+
+- Test `TaskStatus` enumeration members and their values.
+- Test `Task` default construction and field defaults.
+- Test `Task` construction with explicit arguments.
+- Test that `Task.status` accepts only `TaskStatus` values.
+- Test equality and identity semantics of `Task` instances.
+- Do not test storage or CLI behavior in model tests.
