@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, comprising a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore with add/get/list/complete/delete operations (FR-8 through FR-14), and a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), with a package root re-exporting the public API (FR-20). The full dependency chain must close in order: docs \u2192 scaffold \u2192 task model \u2192 storage \u2192 CLI, validating that the Crafted Dev Agent build pipeline can resolve merge gates and cross-PR import dependencies end-to-end.\n\nOperator on 'TRD-TASKLIB Section 6 limits PRs to 3 implementation files a':\nit is okay to combine\n\nOperator on 'FR-1 specifies 'a unique identifier generated automatically ':\nuse whatever makes sense for the task\n\nOperator on 'Section 5 acceptance criteria require tests (e.g., serializa':\nSection 5 acceptance criteria require tests (e.g., serialization round-trip, KeyError on missing complete, creation-order listing) \u2014 should tests be co-located in a tests/ directory mirroring the src/ layout, and should they be included in the same PR as their corresponding implementation or in a separate testing PR?\n\nOperator on 'The CLI (FR-15) must be 'runnable as a Python module' \u2014 shou':\nthe CLI must be invocable from the command line you decide the mechanism",
   "created_at": 1774631794.7817879,
-  "updated_at": 1774632443.119103,
+  "updated_at": 1774633258.10923,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -19,9 +19,12 @@
     {
       "prd_id": "PRD-002",
       "title": "Python Package Scaffold with Subpackage Directories",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
-      "pr_ids": []
+      "pr_ids": [
+        1,
+        2
+      ]
     },
     {
       "prd_id": "PRD-003",
@@ -68,13 +71,45 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "crafted-coordination/impl-journal/PR-001.md",
-      "summary": "Creates the three foundational markdown documents that define tasklib's purpose, layered architecture, package layout, and complete public API surface. README.md covers library purpose, scope, quickstart, and intended audience. ARCHITECTURE.md describes the three-layer architecture (model \u2192 storage \u2192 CLI), package directory structure, and inter-layer dependency rules. API.md documents every public type (Task, TaskStatus), every InMemoryTaskStore method (add/get/list/complete/delete), all Task fields, and all CLI commands (add/list/complete) with signatures and behavior. No Python code is introduced.",
+      "summary": "Creates the complete Python package directory tree under src/tasklib/ as specified by PRD-002. This includes the root package src/tasklib/__init__.py, subpackages src/tasklib/models/__init__.py and src/tasklib/storage/__init__.py, and placeholder module files src/tasklib/models/task.py, src/tasklib/storage/store.py, and src/tasklib/cli.py. Every __init__.py and placeholder module contains only a module-level docstring \u2014 no imports, no assignments, no executable statements.",
       "impl_files": [
-        "README.md",
-        "ARCHITECTURE.md",
-        "API.md"
+        "src/tasklib/__init__.py",
+        "src/tasklib/models/__init__.py",
+        "src/tasklib/models/task.py",
+        "src/tasklib/storage/__init__.py",
+        "src/tasklib/storage/store.py",
+        "src/tasklib/cli.py"
       ],
       "test_files": [],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "2": {
+      "prd_id": "PRD-002",
+      "pr_num": 2,
+      "title": "Tests for tasklib package scaffold importability and docstring-only enforcement",
+      "branch": "",
+      "status": "available",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Validates that the scaffold from PR-1 meets all PRD-002 acceptance criteria. Tests verify: (1) tasklib, tasklib.models, and tasklib.storage are importable without error, (2) all six placeholder modules are importable, (3) AST inspection confirms every __init__.py and placeholder module contains only a module-level docstring with no imports, assignments, or executable statements, (4) importing any package produces no stdout/stderr output.",
+      "impl_files": [],
+      "test_files": [
+        "tests/test_scaffold.py"
+      ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
@@ -84,7 +119,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 3,
+  "version": 4,
   "schema_version": 3,
   "agent_version": "39.75.0"
 }
