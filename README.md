@@ -1,25 +1,25 @@
-# Tasklib — Crafted Dev Agent Validation Library
+# Crafted Dev Agent — Task Management Library
 
-A deliberately simple Python task management library designed to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain from documentation through scaffold to working code.
+A deliberately simple Python task management library (`tasklib`) designed to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain from documentation through scaffold to working code.
 
 ## What It Does
 
-Tasklib validates the Crafted Dev Agent pipeline end-to-end by exercising a full dependency chain: docs → scaffold → model → storage → CLI. It proves that documentation PRs fire merge gates, scaffold PRs mirror files correctly, and code PRs resolve imports from previously-merged PRs before CI. The library exists within the Forge platform ecosystem — a runtime policy enforcement and cryptographic identity platform for enterprise AI agents.
+`tasklib` validates the Crafted Dev Agent pipeline end-to-end by proving that documentation PRs fire merge gates, scaffold PRs mirror files correctly, and code PRs resolve imports from previously-merged PRs before CI. It exercises a full dependency chain — docs → scaffold → model → storage → CLI — ensuring each step produces real merges that downstream steps recognize. The library itself is not a production system; it exists to prove the pipeline works.
 
 ## Key Subsystems
 
-- **Documentation Set** — README, ARCHITECTURE overview, and API reference that trigger the initial merge gate
-- **Python Package Scaffold** — Subpackage directories mirrored to the local test workspace
-- **Model** — Core data model for task management, resolved via the dependency chain
-- **Storage** — Persistence layer that imports from the previously-merged model package
-- **CLI** — Command-line interface that closes the full dependency chain
-- **CAL (Conversation Abstraction Layer)** — Forge enforcement choke point for all agent-originated actions; no tool call, data read, or agent handoff executes without CAL policy evaluation
+- **Documentation Set** — README, ARCHITECTURE overview, and API reference that initiate the dependency chain
+- **Python Package Scaffold** — Subpackage directory structure mirrored to the local test workspace
+- **Model** — Core task data model consumed by downstream packages
+- **Storage** — Persistence layer that imports from the model package
+- **CLI** — Command-line interface that closes the dependency chain by importing from storage and model
+- **CAL (Conversation Abstraction Layer)** — Enforcement choke point for all agent-originated actions; no tool call, data read, or agent handoff executes without CAL policy evaluation
 - **CPF (Conversation Plane Filter)** — Filtering component within the CAL enforcement plane
-- **VTZ Enforcement Plane** — Runtime enforcement layer beneath CAL, above infrastructure
+- **Forge Runtime** — Runtime policy enforcement and cryptographic identity platform for enterprise AI agents, enforcing execution below the application stack
 
 ## Architecture Overview
 
-Tasklib's dependency chain is linear and intentional: documentation merges trigger scaffold generation, which enables model code, which storage depends on, which the CLI consumes. This chain validates that the Crafted Dev Agent correctly resolves cross-PR imports and recognizes upstream merges at each step. The broader Forge architecture enforces agent execution via cryptographic identity and operator-defined policy, with CAL sitting above the VTZ enforcement plane and below application orchestration.
+The `tasklib` dependency chain is strictly linear: documentation merges trigger scaffold generation, which enables model, storage, and CLI code PRs to resolve imports against previously-merged packages. The Forge architecture context underpins the agent pipeline itself — CAL acts as the enforcement choke point sitting above the VTZ enforcement plane and below application orchestration, ensuring every agent action passes through policy evaluation. Together, these layers validate that cryptographic identity and operator-defined policy govern the full build lifecycle.
 
 ## Repository Structure
 
@@ -34,18 +34,18 @@ tests/                 — test suite
 
 ## Getting Started
 
-- Read `CLAUDE.md` before writing or generating any code
+- Read `CLAUDE.md` before writing any code — it contains LLM coding instructions and repo conventions
 - Review `crafted-docs/TRD-TASKLIB.md` to understand the validation goals and dependency chain
-- Review `crafted-docs/forge_architecture_context.md` for platform-level context injected into code generation prompts
-- The full dependency chain must close in order: docs → scaffold → model → storage → CLI
-- Each PR in the chain must resolve imports from previously-merged PRs locally before CI runs
+- Review `crafted-docs/forge_architecture_context.md` for the runtime enforcement architecture
+- The dependency chain must close in order: docs → scaffold → model → storage → CLI
+- Ensure each PR's imports resolve against previously-merged packages before pushing to CI
 
 ## Documentation
 
 | Document | Location | What It Contains |
 |----------|----------|------------------|
-| TRD-TASKLIB | `crafted-docs/TRD-TASKLIB.md` / `crafted-docs/TRD-TASKLIB.docx` | Defines the tasklib validation library — scope, dependency chain, and pipeline validation goals |
-| Forge Architecture Context | `crafted-docs/forge_architecture_context.md` | Platform overview, core subsystems (CAL, CPF, VTZ), and architecture context injected into every code generation prompt |
+| TRD-TASKLIB | `crafted-docs/TRD-TASKLIB.md` / `crafted-docs/TRD-TASKLIB.docx` | Task management library spec; defines the validation dependency chain and pipeline goals |
+| Forge Architecture Context | `crafted-docs/forge_architecture_context.md` | Platform overview, core subsystems (CAL, CPF), and runtime policy enforcement architecture |
 
 ## Where to Go Next
 
