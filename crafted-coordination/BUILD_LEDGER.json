@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore (FR-8 through FR-14), a CLI entry point (FR-15 through FR-19), and a package root re-exporting the public API (FR-20). The purpose is to validate the Crafted Dev Agent build pipeline's ability to close a complete dependency chain \u2014 docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI \u2014 with real merges at each step.\n\nAmbiguity clarifications:\n  - resolve during the PRD process using best practices\n  - resolve during the PRD process using best practices\n  - resolve during the PRD process using best practices\n  - resolve during the PRD process using best practices\n\nOperator on 'Should the Task identifier be a UUID string (uuid.uuid4()) o':\nresolve during the PRD process using best practices\n\nOperator on 'For the CLI list command (FR-17), should the implementation ':\nresolve during the PRD process using best practices\n\nOperator on 'Should tests use unittest (consistent with NFR-1 zero extern':\nresolve during the PRD process using best practices\n\nOperator on 'Should the PR decomposition follow exactly the 5-step depend':\nbuild the best PRD strategy based on the easiest way to execute on building the product",
   "created_at": 1774646033.9981298,
-  "updated_at": 1774647874.609868,
+  "updated_at": 1774649104.373112,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -93,16 +93,16 @@
       "pr_num": 2,
       "title": "Add tasklib Python package scaffold",
       "branch": "",
-      "status": "available",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/9",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774649104.372916,
       "depends_on_prs": [],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "crafted-coordination/impl-journal/PR-002.md",
       "summary": "Creates the directory structure and empty __init__.py files for the tasklib package under src/tasklib/, including the models/ and storage/ subpackages. Also includes pyproject.toml with minimal project metadata (name, version 0.1.0, python_requires >=3.10, no external dependencies, console_scripts entry point stub for 'tasklib = tasklib.cli:main'). An empty src/tasklib/cli.py placeholder is included. This PR contains only structural scaffolding \u2014 no logic, no model definitions, no store implementation. All __init__.py files are empty placeholders.",
       "impl_files": [
         "pyproject.toml",
@@ -124,7 +124,7 @@
       "pr_num": 3,
       "title": "Implement TaskStatus enum and Task dataclass",
       "branch": "",
-      "status": "blocked",
+      "status": "available",
       "engineer_id": "",
       "pr_url": null,
       "claimed_at": null,
@@ -278,7 +278,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 4,
+  "version": 5,
   "schema_version": 3,
   "agent_version": "39.91.0"
 }
