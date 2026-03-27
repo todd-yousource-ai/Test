@@ -10,18 +10,18 @@ Represents a single unit of work.
 |---|---|---:|---|
 | `id` | `string` | yes | Unique identifier. Generated automatically on creation. |
 | `title` | `string` | yes | Must be non-empty. |
-| `status` | `TaskStatus` | yes | Allowed values: `pending`, `in_progress`, `done`. Default on creation: `pending`. |
+| `status` | `TaskStatus` | yes | Allowed values are `pending`, `in_progress`, `done`. Default is `pending` at creation. Must be represented as an enumeration, not free text. |
 | `created_at` | `number` | yes | Numeric timestamp. |
 
-#### Task constraints
-- `id` MUST be unique.
-- `title` MUST be present and MUST NOT be empty.
-- `status` MUST be an enumeration value, not a free-form string.
-- `created_at` MUST be numeric.
+#### Task creation constraints
+- `id` MUST be generated automatically on creation.
+- `title` MUST be provided and MUST be non-empty.
+- `status` defaults to `pending` if omitted at creation.
+- `created_at` MUST be recorded at creation as a numeric timestamp.
 
 ---
 
-### CTXIDToken
+### CTX-ID Token
 
 Per-session, per-agent signed token binding identity, VTZ, policy, and permissions.
 
@@ -29,528 +29,451 @@ Per-session, per-agent signed token binding identity, VTZ, policy, and permissio
 |---|---|---:|---|
 | `agent_id` | `string` | yes | Immutable once issued. |
 | `session_id` | `string` | yes | Immutable once issued. |
-| `vtz_scope` | `string` | yes | Immutable once issued. Binds session to exactly one VTZ. |
+| `vtz_scope` | `string` | yes | Session is bound to exactly one VTZ at issuance. Immutable once issued. |
 | `policy_revision` | `string` | yes | Immutable once issued. |
 | `issued_at` | `number` | yes | Timestamp. Immutable once issued. |
 | `sig` | `string` | yes | Signature. Must validate against TrustLock public key. Immutable once issued. |
 
-#### CTXIDToken constraints
-- CTX-ID tokens are IMMUTABLE once issued.
-- Rotation creates a new token; the old one is invalidated immediately.
+#### CTX-ID constraints
+- Tokens are immutable once issued.
+- Rotation creates a new token.
+- Old token is invalidated immediately on rotation.
 - Missing CTX-ID MUST be treated as `UNTRUSTED`.
 - Expired CTX-ID MUST be rejected.
 - Validation MUST occur against TrustLock public key.
-- No field modification is allowed after issuance.
-
----
-
-### VTZEnforcementDecision
-
-Decision record produced when VTZ policy is evaluated.
-
-| Field | Type | Required | Constraints |
-|---|---|---:|---|
-| `verdict` | `VTZVerdict` | yes | On VTZ policy denial, value MUST be `block`. |
-
-#### VTZEnforcementDecision constraints
-- Produced before execution when action is checked against VTZ policy.
-- VTZ policy denial MUST produce a record with `verdict=block`.
 
 ---
 
 ### TrustFlowEvent
 
-Audit/enforcement event emitted for every action outcome.
+Required event emitted for every action outcome.
 
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `event_id` | `string` | yes | Must be globally unique. CSPRNG-generated, not sequential. |
-| `session_id` | `string` | yes | Session identifier. |
-| `ctx_id` | `string` | yes | CTX-ID reference for the action. |
+| `event_id` | `string` | yes | Globally unique. CSPRNG-generated, not sequential. |
+| `session_id` | `string` | yes | Must correspond to the current session. |
+| `ctx_id` | `string` | yes | CTX-ID associated with the action. |
 | `ts` | `number` | yes | UTC Unix timestamp with millisecond precision. |
-| `event_type` | `string` | yes | Event type identifier. |
+| `event_type` | `string` | yes | Event type discriminator. |
 | `payload_hash` | `string` | yes | SHA-256 of the serialized action payload. |
 
-#### TrustFlowEvent constraints
-- MUST be emitted for every action outcome: `allow`, `restrict`, `block`.
+#### TrustFlow emission constraints
 - Emission MUST be synchronous in the enforcement path.
 - Async buffering is not permitted.
+- Every action outcome (`allow`, `restrict`, `block`) MUST emit a TrustFlow event.
+- Failed emission MUST be surfaced.
 - Failed emission is a WARN-level audit event.
-- Failure MUST NOT silently continue.
+- Failed emission MUST NOT be a silent skip.
+
+---
+
+### VTZEnforcementDecision
+
+Produced when VTZ policy is evaluated.
+
+| Field | Type | Required | Constraints |
+|---|---|---:|---|
+| `verdict` | `VTZVerdict` | yes | On VTZ policy denial, MUST be `block`. |
+| `session_id` | `string` | yes | Session under evaluation. |
+| `ctx_id` | `string` | yes | CTX-ID used for evaluation. |
+| `vtz_scope` | `string` | yes | VTZ bound to the session. |
+| `policy_revision` | `string` | yes | Policy revision used for evaluation. |
+| `reason` | `string` | no | Human-readable denial or restriction reason. |
+
+#### VTZ enforcement constraints
+- Every agent session is bound to exactly one VTZ at CTX-ID issuance.
+- Every action MUST be checked against VTZ policy before execution.
+- Cross-VTZ tool calls require explicit policy authorization.
+- Implicit cross-VTZ access is denied.
+- VTZ boundaries are structural and cannot be bypassed by application code.
+- VTZ policy changes take effect at next CTX-ID issuance, not mid-session.
 
 ---
 
 ### ValidationResult
 
-Canonical validation response for the Validation subsystem.
+Canonical validation outcome for the Validation subsystem.
 
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `valid` | `boolean` | yes | `true` only if all applicable validation rules pass. |
-| `errors` | `ValidationError[]` | yes | Empty array when `valid=true`. |
-| `warnings` | `ValidationWarning[]` | yes | Empty array if none. |
-| `decision` | `VTZEnforcementDecision` | no | Present when VTZ policy evaluation occurs. |
-| `trustflow_event` | `TrustFlowEvent` | no | Present when emission succeeds. |
-
-#### ValidationResult constraints
-- If `valid=true`, `errors` MUST be empty.
-- If CTX-ID validation fails, processing MUST be rejected immediately.
-- No partial processing is allowed after CTX-ID validation failure.
+| `valid` | `boolean` | yes | `true` if validation succeeds, else `false`. |
+| `errors` | `ValidationError[]` | yes | Empty array when `valid=true`. Non-empty when `valid=false`. |
+| `warnings` | `ValidationWarning[]` | no | Optional advisory messages. |
+| `subject_type` | `string` | yes | Type being validated, e.g. `Task`, `CTX-ID`, `TrustFlowEvent`, `VTZEnforcementDecision`. |
 
 ---
 
 ### ValidationError
 
-Represents a validation failure.
-
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
 | `code` | `string` | yes | Stable machine-readable error code. |
-| `message` | `string` | yes | Human-readable description. |
-| `field` | `string` | no | Field name associated with the error. |
-| `severity` | `ValidationSeverity` | yes | Severity classification. |
+| `field` | `string` | no | Field name that failed validation. |
+| `message` | `string` | yes | Human-readable error message. |
 
 ---
 
 ### ValidationWarning
 
-Represents a non-fatal validation or audit issue.
-
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
 | `code` | `string` | yes | Stable machine-readable warning code. |
-| `message` | `string` | yes | Human-readable description. |
-| `field` | `string` | no | Field name associated with the warning. |
-| `severity` | `ValidationSeverity` | yes | Severity classification. |
+| `field` | `string` | no | Related field name. |
+| `message` | `string` | yes | Human-readable warning message. |
 
 ---
 
-### AgentActionEnvelope
+### CPFValidationEnvelope
 
-Validation input envelope for any agent-originated action.
+Validation envelope aligned to CPF Tier 1 structural validation.
 
 | Field | Type | Required | Constraints |
 |---|---|---:|---|
-| `ctx_id` | `CTXIDToken` | yes | MUST be validated first. Missing CTX-ID is `UNTRUSTED`. |
-| `session_id` | `string` | yes | Must match session bound in CTX-ID. |
-| `action_payload` | `object` | yes | Serialized payload used to compute `payload_hash`. |
-| `event_type` | `string` | yes | Used in emitted `TrustFlowEvent`. |
+| `ctx_id` | `CTX-ID Token` | yes | MUST be validated first for any entry point that processes an agent action. |
+| `payload_type` | `string` | yes | Identifies the payload schema under validation. |
+| `payload` | `object` | yes | Serialized action payload subject to structural validation. |
+| `session_id` | `string` | yes | Must match CTX-ID session binding. |
+| `ts` | `number` | yes | Request timestamp. |
 
-#### AgentActionEnvelope constraints
-- Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
-- Every action MUST be checked against VTZ policy BEFORE execution.
-- No tool call, data read, API invocation, or agent handoff executes without passing through CAL policy evaluation.
-
----
+#### CPF constraints
+- Tier 1 performs structural validation including schema and bounds checking.
+- Tier 2 performs semantic classification.
+- Tier 3 performs behavioral analysis.
+- All tiers run synchronously in the enforcement path.
+- Validation fails closed.
 
 ## Enums and Constants
 
-### TaskStatus
-
-Allowed values exactly:
-
+### `TaskStatus`
+Allowed values:
 - `pending`
 - `in_progress`
 - `done`
 
+Default:
+- `pending`
+
 ---
 
-### VTZVerdict
-
+### `VTZVerdict`
 Allowed values:
-
 - `allow`
 - `restrict`
 - `block`
 
 Constraint:
-- On VTZ policy denial, value MUST be `block`.
+- VTZ policy denial MUST produce `verdict=block`.
 
 ---
 
-### ValidationSeverity
+### Trust and identity constants
 
-Allowed values:
-
-- `error`
-- `warning`
-
----
-
-### Validation Constants
-
-#### Identity and trust constants
-- `UNTRUSTED` — classification used when CTX-ID is missing.
-
-#### Hashing
-- `SHA-256` — required algorithm for `payload_hash`.
-
-#### Time format
-- `ts` in `TrustFlowEvent` MUST be a UTC Unix timestamp with millisecond precision.
-- `issued_at` in `CTXIDToken` MUST be a timestamp.
-- `created_at` in `Task` MUST be a numeric timestamp.
-
----
+| Name | Type | Value / Constraint |
+|---|---|---|
+| `CTX_ID_UNTRUSTED` | `string` | `UNTRUSTED` |
+| `HASH_ALGORITHM` | `string` | `SHA-256` |
+| `TIMESTAMP_FORMAT_TRUSTFLOW` | `string` | UTC Unix timestamp with millisecond precision |
+| `TRUSTFLOW_EVENT_ID_SOURCE` | `string` | CSPRNG |
+| `TRUSTFLOW_EVENT_ID_SEQUENCE_ALLOWED` | `boolean` | `false` |
 
 ## Validation Rules
 
-### 1. Task validation
+### 1. Entry-point validation order
+For every entry point that processes an agent action:
+1. CTX-ID validation MUST occur first.
+2. If CTX-ID validation fails, processing MUST be rejected immediately.
+3. No partial processing is permitted after CTX-ID validation failure.
+4. VTZ policy evaluation MUST occur before execution.
+5. If VTZ policy denies the action, a `VTZEnforcementDecision` MUST be produced with `verdict=block`.
+6. Every action outcome MUST emit a `TrustFlowEvent`.
 
-#### 1.1 Required fields
-A `Task` payload MUST include:
-- `id`
-- `title`
-- `status`
-- `created_at`
-
-#### 1.2 Field rules
+### 2. Task validation rules
+- `id` MUST be present for persisted or materialized task objects.
 - `id` MUST be unique.
 - `id` MUST be generated automatically on creation.
+- `title` MUST be present.
 - `title` MUST be a string.
 - `title` MUST be non-empty.
-- `status` MUST be one of:
-  - `pending`
-  - `in_progress`
-  - `done`
-- `status` MUST be defined as an enumeration, not as free-form input.
-- If not explicitly provided at creation, `status` defaults to `pending`.
+- `status` MUST be one of `pending`, `in_progress`, `done`.
+- `status` MUST be represented as an enumeration, not free text.
+- If omitted during creation, `status` defaults to `pending`.
+- `created_at` MUST be present.
 - `created_at` MUST be numeric.
 
----
-
-### 2. CTX-ID validation
-
-Validation order is mandatory.
-
-#### 2.1 First-step validation
-- Every entry point that processes an agent action MUST call CTX-ID validation FIRST.
-
-#### 2.2 Rejection behavior
-- CTX-ID validation failure MUST result in immediate rejection.
-- No partial processing is permitted after CTX-ID validation failure.
-
-#### 2.3 Presence rules
+### 3. CTX-ID validation rules
+- CTX-ID MUST be present for any agent-originated action.
 - Missing CTX-ID MUST be treated as `UNTRUSTED`.
-- Identity MUST never be inferred from surrounding context.
-
-#### 2.4 Token rules
-- CTX-ID tokens are immutable once issued.
-- Rotation creates a new token.
-- The old token is invalidated immediately.
-- Expired CTX-ID MUST be rejected.
-- Validation MUST be performed against TrustLock public key.
+- CTX-ID MUST validate against TrustLock public key.
 - Software-only validation is rejected.
+- CTX-ID fields are immutable after issuance.
+- Rotated CTX-ID creates a new token.
+- Old CTX-ID is invalid immediately after rotation.
+- Expired CTX-ID MUST be rejected.
+- Session is bound to exactly one VTZ at CTX-ID issuance.
+- VTZ policy changes do not alter existing session behavior mid-session.
 
-#### 2.5 Session/VTZ binding
-- Each agent session is bound to exactly one VTZ at CTX-ID issuance.
-- `vtz_scope` binds identity to VTZ.
-- VTZ policy changes take effect at next CTX-ID issuance, not mid-session.
-
----
-
-### 3. VTZ policy validation
-
-- Every action MUST be checked against VTZ policy BEFORE execution.
-- Cross-VTZ tool calls require explicit policy authorization.
-- Implicit cross-VTZ access is denied.
-- VTZ boundaries are structural, not advisory.
-- Enforcement cannot be bypassed by application code.
-- VTZ policy denial MUST produce a `VTZEnforcementDecision` with:
-  - `verdict`: `block`
-
----
-
-### 4. TrustFlow validation and emission
-
-- Every action outcome MUST emit a `TrustFlowEvent`.
-- Outcomes include:
-  - `allow`
-  - `restrict`
-  - `block`
+### 4. TrustFlow validation rules
+- `event_id` MUST be present.
+- `event_id` MUST be globally unique.
+- `event_id` MUST be CSPRNG-generated.
+- Sequential `event_id` values are not permitted.
+- `session_id` MUST be present.
+- `ctx_id` MUST be present.
+- `ts` MUST be present.
+- `ts` MUST be a UTC Unix timestamp with millisecond precision.
+- `event_type` MUST be present.
+- `payload_hash` MUST be present.
+- `payload_hash` MUST be the SHA-256 of the serialized action payload.
 - Emission MUST be synchronous in the enforcement path.
 - Async buffering is not permitted.
-- `event_id` MUST be globally unique.
-- `event_id` MUST be CSPRNG-generated and MUST NOT be sequential.
-- `ts` MUST be UTC Unix timestamp with millisecond precision.
-- `payload_hash` MUST be SHA-256 of the serialized action payload.
-- TrustFlow emission failure MUST NOT silently continue.
-- Failed emission is a WARN-level audit event and MUST be surfaced.
+- Emission failure MUST be logged and surfaced.
+- Emission failure MUST be WARN-level audit behavior, not silent continuation.
 
----
+### 5. VTZ validation rules
+- Every action MUST be checked against VTZ policy before execution.
+- Every session MUST be bound to exactly one VTZ.
+- Cross-VTZ tool calls require explicit policy authorization.
+- Implicit cross-VTZ authorization is denied.
+- VTZ enforcement cannot be bypassed by application code.
+- VTZ denial MUST produce `VTZEnforcementDecision.verdict = block`.
 
-### 5. CAL and CPF enforcement validation
-
-#### 5.1 CAL
-- No tool call, data read, API invocation, or agent handoff executes without passing through CAL policy evaluation.
-
-#### 5.2 CPF
-All three tiers run synchronously in the enforcement path and fail closed.
-
-Tier requirements:
-1. Tier 1: structural validation
-   - schema
-   - bounds checking
-2. Tier 2: semantic classification
-   - intent
-   - data sensitivity
-   - policy match
-3. Tier 3: behavioral analysis
-   - anomaly detection
-   - attack pattern recognition
-
-Fail-closed requirement:
-- If any required CPF validation fails, the action MUST be rejected.
-
----
+### 6. CPF validation rules
+- Tier 1 MUST perform structural validation.
+- Tier 1 includes schema validation and bounds checking.
+- Tier 2 MUST perform semantic classification.
+- Tier 3 MUST perform behavioral analysis.
+- All three tiers MUST run synchronously in the enforcement path.
+- Validation MUST fail closed.
 
 ## Wire Format Examples
 
-## Valid payloads
-
-### Valid Task
+### Valid payload: Task
 
 ```json
 {
-  "id": "task_01",
+  "id": "task_001",
   "title": "Write INTERFACES.md",
   "status": "pending",
-  "created_at": 1712345678
+  "created_at": 1710000000
 }
 ```
 
-### Valid Task with non-default status
+### Invalid payload: Task with empty title
 
 ```json
 {
-  "id": "task_02",
-  "title": "Implement validation checks",
-  "status": "in_progress",
-  "created_at": 1712345678
-}
-```
-
-### Valid CTXIDToken
-
-```json
-{
-  "agent_id": "agent_123",
-  "session_id": "session_456",
-  "vtz_scope": "vtz_alpha",
-  "policy_revision": "2026-03-01",
-  "issued_at": 1712345678123,
-  "sig": "base64-signature"
-}
-```
-
-### Valid TrustFlowEvent
-
-```json
-{
-  "event_id": "a4f2b7b2-7c57-4f47-bf96-1bb9c4ef2f01",
-  "session_id": "session_456",
-  "ctx_id": "ctx_789",
-  "ts": 1712345678123,
-  "event_type": "task.create",
-  "payload_hash": "8f14e45fceea167a5a36dedd4bea2543d0f9e8dbf6a1f4d3c7b2e5d6a7b8c9d0"
-}
-```
-
-### Valid AgentActionEnvelope
-
-```json
-{
-  "ctx_id": {
-    "agent_id": "agent_123",
-    "session_id": "session_456",
-    "vtz_scope": "vtz_alpha",
-    "policy_revision": "2026-03-01",
-    "issued_at": 1712345678123,
-    "sig": "base64-signature"
-  },
-  "session_id": "session_456",
-  "event_type": "task.create",
-  "action_payload": {
-    "id": "task_03",
-    "title": "Create task",
-    "status": "pending",
-    "created_at": 1712345678
-  }
-}
-```
-
-### Valid ValidationResult
-
-```json
-{
-  "valid": true,
-  "errors": [],
-  "warnings": [],
-  "decision": {
-    "verdict": "allow"
-  },
-  "trustflow_event": {
-    "event_id": "a4f2b7b2-7c57-4f47-bf96-1bb9c4ef2f01",
-    "session_id": "session_456",
-    "ctx_id": "ctx_789",
-    "ts": 1712345678123,
-    "event_type": "task.create",
-    "payload_hash": "8f14e45fceea167a5a36dedd4bea2543d0f9e8dbf6a1f4d3c7b2e5d6a7b8c9d0"
-  }
-}
-```
-
-## Invalid payloads
-
-### Invalid Task: empty title
-
-```json
-{
-  "id": "task_04",
+  "id": "task_002",
   "title": "",
   "status": "pending",
-  "created_at": 1712345678
+  "created_at": 1710000000
 }
 ```
 
 Reason:
-- `title` must be non-empty.
+- `title` is required and must be non-empty.
 
-### Invalid Task: unsupported status
+---
+
+### Invalid payload: Task with invalid status
 
 ```json
 {
-  "id": "task_05",
-  "title": "Bad status example",
+  "id": "task_003",
+  "title": "Implement validator",
   "status": "blocked",
-  "created_at": 1712345678
+  "created_at": 1710000000
 }
 ```
 
 Reason:
 - `status` must be one of `pending`, `in_progress`, `done`.
 
-### Invalid Task: non-numeric timestamp
+---
+
+### Valid payload: CTX-ID Token
 
 ```json
 {
-  "id": "task_06",
-  "title": "Bad timestamp",
-  "status": "done",
-  "created_at": "1712345678"
+  "agent_id": "agent-7",
+  "session_id": "session-42",
+  "vtz_scope": "vtz-alpha",
+  "policy_revision": "2026-03-27.1",
+  "issued_at": 1743033600,
+  "sig": "base64-signature-material"
 }
 ```
 
-Reason:
-- `created_at` must be numeric.
-
-### Invalid CTXIDToken: missing signature
+### Invalid payload: CTX-ID Token missing signature
 
 ```json
 {
-  "agent_id": "agent_123",
-  "session_id": "session_456",
-  "vtz_scope": "vtz_alpha",
-  "policy_revision": "2026-03-01",
-  "issued_at": 1712345678123
+  "agent_id": "agent-7",
+  "session_id": "session-42",
+  "vtz_scope": "vtz-alpha",
+  "policy_revision": "2026-03-27.1",
+  "issued_at": 1743033600
 }
 ```
 
 Reason:
 - `sig` is required.
+- CTX-ID must validate against TrustLock public key.
 
-### Invalid AgentActionEnvelope: missing CTX-ID
+---
 
-```json
-{
-  "session_id": "session_456",
-  "event_type": "task.create",
-  "action_payload": {
-    "id": "task_03",
-    "title": "Create task",
-    "status": "pending",
-    "created_at": 1712345678
-  }
-}
-```
-
-Reason:
-- Missing CTX-ID must be treated as `UNTRUSTED`.
-- Request must be rejected.
-
-### Invalid VTZEnforcementDecision for denial
+### Valid payload: TrustFlowEvent
 
 ```json
 {
-  "verdict": "allow"
+  "event_id": "6f1d7d7e-8e9f-4b52-a8c6-d3f0e1f6a123",
+  "session_id": "session-42",
+  "ctx_id": "ctx-abc123",
+  "ts": 1743033600123,
+  "event_type": "block",
+  "payload_hash": "3f0a377ba0a4a460ecb616f6507ce0d8cfa1b9c7b1d8eb10e442b7b6f5e4a6ab"
 }
 ```
 
-Reason:
-- On VTZ policy denial, `verdict` must be `block`.
-
-### Invalid TrustFlowEvent: sequential event id and wrong timestamp precision
+### Invalid payload: TrustFlowEvent with sequential event id semantics
 
 ```json
 {
   "event_id": "1001",
-  "session_id": "session_456",
-  "ctx_id": "ctx_789",
-  "ts": 1712345678,
-  "event_type": "task.create",
-  "payload_hash": "not-a-sha-256"
+  "session_id": "session-42",
+  "ctx_id": "ctx-abc123",
+  "ts": 1743033600123,
+  "event_type": "allow",
+  "payload_hash": "3f0a377ba0a4a460ecb616f6507ce0d8cfa1b9c7b1d8eb10e442b7b6f5e4a6ab"
 }
 ```
 
 Reason:
 - `event_id` must be globally unique and CSPRNG-generated, not sequential.
-- `ts` must be UTC Unix timestamp with millisecond precision.
-- `payload_hash` must be SHA-256 of the serialized action payload.
 
 ---
+
+### Valid payload: VTZEnforcementDecision
+
+```json
+{
+  "verdict": "block",
+  "session_id": "session-42",
+  "ctx_id": "ctx-abc123",
+  "vtz_scope": "vtz-alpha",
+  "policy_revision": "2026-03-27.1",
+  "reason": "Cross-VTZ tool call denied"
+}
+```
+
+### Invalid payload: VTZ denial recorded as allow
+
+```json
+{
+  "verdict": "allow",
+  "session_id": "session-42",
+  "ctx_id": "ctx-abc123",
+  "vtz_scope": "vtz-alpha",
+  "policy_revision": "2026-03-27.1",
+  "reason": "Policy denied action"
+}
+```
+
+Reason:
+- VTZ policy denial must produce `verdict=block`.
+
+---
+
+### Valid payload: CPFValidationEnvelope
+
+```json
+{
+  "ctx_id": {
+    "agent_id": "agent-7",
+    "session_id": "session-42",
+    "vtz_scope": "vtz-alpha",
+    "policy_revision": "2026-03-27.1",
+    "issued_at": 1743033600,
+    "sig": "base64-signature-material"
+  },
+  "payload_type": "Task",
+  "payload": {
+    "id": "task_004",
+    "title": "Run structural validation",
+    "status": "in_progress",
+    "created_at": 1743033600
+  },
+  "session_id": "session-42",
+  "ts": 1743033600123
+}
+```
+
+### Invalid payload: CPFValidationEnvelope with session mismatch
+
+```json
+{
+  "ctx_id": {
+    "agent_id": "agent-7",
+    "session_id": "session-42",
+    "vtz_scope": "vtz-alpha",
+    "policy_revision": "2026-03-27.1",
+    "issued_at": 1743033600,
+    "sig": "base64-signature-material"
+  },
+  "payload_type": "Task",
+  "payload": {
+    "id": "task_004",
+    "title": "Run structural validation",
+    "status": "in_progress",
+    "created_at": 1743033600
+  },
+  "session_id": "session-99",
+  "ts": 1743033600123
+}
+```
+
+Reason:
+- Envelope `session_id` must match `ctx_id.session_id`.
 
 ## Integration Points
 
 ### CAL — Conversation Abstraction Layer
-Validation subsystem integration requirements:
-- Acts as enforcement choke point for all agent-originated action.
-- Sits above the VTZ enforcement plane and below application orchestration.
-- No action may bypass CAL validation.
+Validation integrates with CAL as the enforcement choke point for all agent-originated action.
+- No tool call, data read, API invocation, or agent handoff executes without passing through CAL policy evaluation.
+- Validation must execute in the CAL enforcement path.
 
 ### CPF — Conversation Plane Filter
-Validation subsystem MUST support synchronous fail-closed validation across:
-- Tier 1 structural validation
-- Tier 2 semantic classification
-- Tier 3 behavioral analysis
+Validation maps directly to CPF tiers:
+- Tier 1: structural validation, including schema and bounds checking.
+- Tier 2: semantic classification.
+- Tier 3: behavioral analysis.
+- All tiers run synchronously.
+- Fail closed behavior is required.
 
 ### CTX-ID
-Validation subsystem MUST:
-- Validate CTX-ID first
-- Reject expired, missing, invalid, or modified CTX-ID
-- Enforce immutability and rotation behavior
-- Bind action processing to `agent_id`, `session_id`, `vtz_scope`, `policy_revision`, `issued_at`, `sig`
+Validation must:
+- validate CTX-ID first,
+- reject missing or expired tokens,
+- enforce immutability,
+- require TrustLock public key verification,
+- treat missing CTX-ID as `UNTRUSTED`.
 
 ### VTZ — Virtual Trust Zone
-Validation subsystem MUST:
-- Enforce exactly-one-VTZ binding per session
-- Evaluate policy before execution
-- Deny implicit cross-VTZ calls
-- Produce `VTZEnforcementDecision` on denial with `verdict=block`
+Validation must:
+- enforce exactly one VTZ per session,
+- validate policy before execution,
+- deny implicit cross-VTZ actions,
+- produce `VTZEnforcementDecision` records for denials.
 
-### TrustFlow
-Validation subsystem MUST:
-- Emit one synchronous `TrustFlowEvent` for every action outcome
-- Include exactly these required fields:
-  - `event_id`
-  - `session_id`
-  - `ctx_id`
-  - `ts`
-  - `event_type`
-  - `payload_hash`
+### TrustFlow / SIS
+Validation must ensure:
+- every action outcome emits a `TrustFlowEvent`,
+- the event includes `event_id`, `session_id`, `ctx_id`, `ts`, `event_type`, `payload_hash`,
+- synchronous emission in enforcement path,
+- surfaced WARN-level behavior on emission failure.
 
-### Task library model validation
-Validation subsystem MUST validate `Task` payloads for:
-- required fields
-- enum-constrained `status`
-- non-empty `title`
-- numeric `created_at`
-- unique auto-generated `id`
+### Task model validation
+Validation must support the tasklib dependency chain by enforcing:
+- task identity generation,
+- title non-empty requirement,
+- enumerated status values,
+- numeric creation timestamp.
