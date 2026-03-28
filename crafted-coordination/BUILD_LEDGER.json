@@ -4,15 +4,20 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore with add/get/list/complete/delete operations (FR-8 through FR-14), a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), and a package root re-exporting the public API (FR-20). The purpose is to validate the Crafted Dev Agent build pipeline's ability to close a complete dependency chain \u2014 docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI \u2014 with real merges at each step.\n\nOperator on 'Should the dependency chain be decomposed into exactly 5 PRs':\nbuild the PRDs in the way that works best for code development\n\nOperator on 'For the Task identifier (FR-1), should we use UUID4 strings ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Should tests be included in each component PR alongside the ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Is there a target Python version (e.g., 3.10+ for match stat':\nPython 3.11+ 3.14.0",
   "created_at": 1774720319.932831,
-  "updated_at": 1774720319.9328861,
+  "updated_at": 1774720622.069777,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
       "prd_id": "PRD-001",
       "title": "Documentation Baseline \u2014 README, ARCHITECTURE, and API Reference",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
-      "pr_ids": []
+      "pr_ids": [
+        1,
+        2,
+        3,
+        4
+      ]
     },
     {
       "prd_id": "PRD-002",
@@ -43,9 +48,122 @@
       "pr_ids": []
     }
   ],
-  "pr_entries": {},
+  "pr_entries": {
+    "1": {
+      "prd_id": "PRD-001",
+      "pr_num": 1,
+      "title": "Add README.md \u2014 library purpose, structure, and usage example",
+      "branch": "",
+      "status": "available",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Creates README.md at the repository root. Describes the tasklib library's purpose (validation of the Crafted Dev Agent build pipeline), the src/tasklib/ package structure with models/ and storage/ subpackages, installation instructions via editable install (`pip install -e .`), and a working Python 3.11+ usage example demonstrating Task creation, InMemoryTaskStore operations, and CLI invocation. No Python source files are created.",
+      "impl_files": [
+        "README.md"
+      ],
+      "test_files": [],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "2": {
+      "prd_id": "PRD-001",
+      "pr_num": 2,
+      "title": "Add ARCHITECTURE.md \u2014 dependency chain and design constraints",
+      "branch": "",
+      "status": "available",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Creates ARCHITECTURE.md at the repository root. Documents the four-layer dependency chain (docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI) with an ASCII diagram, the zero-external-dependency constraint, the Python 3.11+ target, and the rationale for each layer boundary. Describes how each layer validates a different pipeline capability (doc-only merge, scaffold merge, model import, storage integration, CLI entry point). No Python source files are created.",
+      "impl_files": [
+        "ARCHITECTURE.md"
+      ],
+      "test_files": [],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "3": {
+      "prd_id": "PRD-001",
+      "pr_num": 3,
+      "title": "Add API.md \u2014 public API reference for Task, TaskStatus, InMemoryTaskStore, and CLI",
+      "branch": "",
+      "status": "available",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Creates API.md at the repository root. Documents every public symbol: TaskStatus enum (PENDING, IN_PROGRESS, COMPLETE), Task dataclass (all fields, types, defaults, constraints including UUID4 id generation and datetime timestamps), InMemoryTaskStore (add/get/list/complete/delete method signatures with parameter types, return types, and exception behavior), serialization contracts (to_dict/from_dict), and CLI commands (add/list/complete) with argument formats and expected stdout output. No Python source files are created.",
+      "impl_files": [
+        "API.md"
+      ],
+      "test_files": [],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "4": {
+      "prd_id": "PRD-001",
+      "pr_num": 4,
+      "title": "Validate documentation set \u2014 structural and content lint tests",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1,
+        2,
+        3
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Adds tests that validate the three documentation files exist at the repository root and contain required sections. Checks README.md for installation and usage sections, ARCHITECTURE.md for the dependency chain diagram and zero-dependency constraint, and API.md for all public class/method headings (Task, TaskStatus, InMemoryTaskStore, add, get, list_tasks, complete, delete, to_dict, from_dict, CLI commands). Tests are pure Python using only stdlib (pathlib, re, unittest).",
+      "impl_files": [],
+      "test_files": [
+        "tests/test_documentation.py"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    }
+  },
   "knowledge_notes": [],
-  "version": 1,
+  "version": 2,
   "schema_version": 3,
   "agent_version": "39.108.0"
 }
