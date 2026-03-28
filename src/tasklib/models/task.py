@@ -1,10 +1,11 @@
-"""Task model definitions for tasklib.
+"""Task model definitions for tasklib."""
 
-This module will contain the Task dataclass and TaskStatus enumeration.
-The Task dataclass represents a single task with an identifier, title,
-status, and creation timestamp. The TaskStatus enumeration defines the
-possible states a task can occupy (pending, done).
+from enum import StrEnum
 
-This module is currently a placeholder. Implementation will be added by
-a downstream PR.
-"""
+
+class TaskStatus(StrEnum):
+    """Represents the status of a task."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
