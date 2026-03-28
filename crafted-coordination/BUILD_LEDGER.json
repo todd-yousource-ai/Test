@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore with add/get/list/complete/delete operations (FR-8 through FR-14), a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), and a package root re-exporting the public API (FR-20). The purpose is to validate the Crafted Dev Agent build pipeline's ability to close a complete dependency chain \u2014 docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI \u2014 with real merges at each step.\n\nOperator on 'Should the dependency chain be decomposed into exactly 5 PRs':\nbuild the PRDs in the way that works best for code development\n\nOperator on 'For the Task identifier (FR-1), should we use UUID4 strings ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Should tests be included in each component PR alongside the ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Is there a target Python version (e.g., 3.10+ for match stat':\nPython 3.11+ 3.14.0",
   "created_at": 1774720319.932831,
-  "updated_at": 1774721863.975411,
+  "updated_at": 1774722050.328901,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -108,16 +108,16 @@
       "pr_num": 3,
       "title": "Add API.md \u2014 public API reference for Task, TaskStatus, InMemoryTaskStore, and CLI",
       "branch": "",
-      "status": "available",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/25",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774722050.328686,
       "depends_on_prs": [],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "crafted-coordination/impl-journal/PR-003.md",
       "summary": "Creates API.md at the repository root. Documents every public symbol: TaskStatus enum (PENDING, IN_PROGRESS, COMPLETE), Task dataclass (all fields, types, defaults, constraints including UUID4 id generation and datetime timestamps), InMemoryTaskStore (add/get/list/complete/delete method signatures with parameter types, return types, and exception behavior), serialization contracts (to_dict/from_dict), and CLI commands (add/list/complete) with argument formats and expected stdout output. No Python source files are created.",
       "impl_files": [
         "API.md"
@@ -135,7 +135,7 @@
       "pr_num": 4,
       "title": "Validate documentation set \u2014 structural and content lint tests",
       "branch": "",
-      "status": "blocked",
+      "status": "available",
       "engineer_id": "",
       "pr_url": null,
       "claimed_at": null,
@@ -163,7 +163,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 4,
+  "version": 5,
   "schema_version": 3,
   "agent_version": "39.108.0"
 }
