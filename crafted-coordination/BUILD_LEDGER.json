@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore with add/get/list/complete/delete operations (FR-8 through FR-14), a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), and a package root re-exporting the public API (FR-20). The purpose is to validate the Crafted Dev Agent build pipeline's ability to close a complete dependency chain \u2014 docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI \u2014 with real merges at each step.\n\nOperator on 'Should the dependency chain be decomposed into exactly 5 PRs':\nbuild the PRDs in the way that works best for code development\n\nOperator on 'For the Task identifier (FR-1), should we use UUID4 strings ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Should tests be included in each component PR alongside the ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Is there a target Python version (e.g., 3.10+ for match stat':\nPython 3.11+ 3.14.0",
   "created_at": 1774720319.932831,
-  "updated_at": 1774720622.069777,
+  "updated_at": 1774721692.174329,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -54,16 +54,16 @@
       "pr_num": 1,
       "title": "Add README.md \u2014 library purpose, structure, and usage example",
       "branch": "",
-      "status": "available",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/23",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774721692.174307,
       "depends_on_prs": [],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "crafted-coordination/impl-journal/PR-001.md",
       "summary": "Creates README.md at the repository root. Describes the tasklib library's purpose (validation of the Crafted Dev Agent build pipeline), the src/tasklib/ package structure with models/ and storage/ subpackages, installation instructions via editable install (`pip install -e .`), and a working Python 3.11+ usage example demonstrating Task creation, InMemoryTaskStore operations, and CLI invocation. No Python source files are created.",
       "impl_files": [
         "README.md"
@@ -163,7 +163,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 2,
+  "version": 3,
   "schema_version": 3,
   "agent_version": "39.108.0"
 }
