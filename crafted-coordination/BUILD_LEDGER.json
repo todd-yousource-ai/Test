@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore with add/get/list/complete/delete operations (FR-8 through FR-14), a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), and a package root re-exporting the public API (FR-20). The purpose is to validate the Crafted Dev Agent build pipeline's ability to close a complete dependency chain \u2014 docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI \u2014 with real merges at each step.\n\nOperator on 'Should the dependency chain be decomposed into exactly 5 PRs':\nbuild the PRDs in the way that works best for code development\n\nOperator on 'For the Task identifier (FR-1), should we use UUID4 strings ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Should tests be included in each component PR alongside the ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Is there a target Python version (e.g., 3.10+ for match stat':\nPython 3.11+ 3.14.0",
   "created_at": 1774720319.932831,
-  "updated_at": 1774725691.10246,
+  "updated_at": 1774726031.375606,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -35,9 +35,13 @@
     {
       "prd_id": "PRD-003",
       "title": "Task Model \u2014 Task Dataclass and TaskStatus Enumeration",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
-      "pr_ids": []
+      "pr_ids": [
+        1,
+        2,
+        3
+      ]
     },
     {
       "prd_id": "PRD-004",
@@ -70,11 +74,13 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "crafted-coordination/impl-journal/PR-001.md",
-      "summary": "Creates the repository-root pyproject.toml declaring name='tasklib', version='0.1.0', requires-python='>=3.11', zero external dependencies, src-layout package discovery, and the [project.scripts] entry point tasklib='tasklib.cli:main'. No Python source files are included \u2014 this PR contains only the build/packaging configuration.",
+      "summary": "Define the TaskStatus enumeration as a StrEnum (Python 3.11+) with exactly three members: PENDING='pending', IN_PROGRESS='in_progress', DONE='done'. This replaces the placeholder content in src/tasklib/models/task.py with the enumeration only \u2014 the Task dataclass is delivered in the next PR to keep the diff minimal and independently reviewable.",
       "impl_files": [
-        "pyproject.toml"
+        "src/tasklib/models/task.py"
       ],
-      "test_files": [],
+      "test_files": [
+        "tests/models/test_task_status.py"
+      ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
@@ -97,17 +103,17 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "crafted-coordination/impl-journal/PR-002.md",
-      "summary": "Creates foundational documentation including README.md, docs/ARCHITECTURE.md, and docs/API_REFERENCE.md describing the tasklib package purpose, directory layout, public API surface, and design decisions. No code files included.",
+      "summary": "Add the Task dataclass to src/tasklib/models/task.py alongside the existing TaskStatus enum. Task is a @dataclass with fields: id (str, default_factory=uuid4().hex), title (str, required), status (TaskStatus, default PENDING), created_at (float, default_factory=time.time). __post_init__ validates title is non-empty and non-whitespace-only, raising ValueError. to_dict() returns a plain dict with status serialized as its string value. from_dict() is a classmethod that reconstructs a Task from a dict, coercing the status string through TaskStatus and raising ValueError for invalid status strings.",
       "impl_files": [
-        "README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/API_REFERENCE.md"
+        "src/tasklib/models/task.py"
       ],
-      "test_files": [],
+      "test_files": [
+        "tests/models/test_task.py"
+      ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
-      "estimated_complexity": "low",
+      "estimated_complexity": "medium",
       "acceptance_criteria": [],
       "impl_plan": {}
     },
@@ -126,13 +132,13 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "crafted-coordination/impl-journal/PR-003.md",
-      "summary": "Creates the src-layout directory tree: src/tasklib/__init__.py, src/tasklib/models/__init__.py, and src/tasklib/storage/__init__.py. Each __init__.py contains only a module-level docstring describing the package's purpose and an __all__ = [] declaration. No executable code, no submodule imports, no re-exports. This establishes all three importable package paths that downstream PRs depend on.",
+      "summary": "Update src/tasklib/models/__init__.py to import and re-export Task and TaskStatus with an explicit __all__ = ['Task', 'TaskStatus']. This enables downstream consumers (store, CLI, package root) to use `from tasklib.models import Task, TaskStatus` as the canonical import path.",
       "impl_files": [
-        "src/tasklib/__init__.py",
-        "src/tasklib/models/__init__.py",
-        "src/tasklib/storage/__init__.py"
+        "src/tasklib/models/__init__.py"
       ],
-      "test_files": [],
+      "test_files": [
+        "tests/models/test_models_init.py"
+      ],
       "language": "python",
       "framework": "pytest",
       "security_critical": false,
@@ -207,7 +213,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 11,
+  "version": 12,
   "schema_version": 3,
   "agent_version": "39.108.0"
 }
