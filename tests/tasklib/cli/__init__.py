@@ -1,1 +1,1 @@
-"""Test directory marker for tasklib CLI tests."""
+"""Package placeholder — tests/tasklib/cli/__init__.py."""
