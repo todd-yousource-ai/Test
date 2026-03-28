@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore (FR-8 through FR-14), a CLI entry point (FR-15 through FR-19), and a package root re-exporting the public API (FR-20). The library validates the Crafted Dev Agent build pipeline's ability to close a complete dependency chain \u2014 docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI \u2014 with real merges at each step.\n\nAmbiguity clarifications:\n  - this should be resolves during the PRD process using best practices.\n  - this should be resolves during the PRD process using best practices.\n  - this should be resolves during the PRD process using best practices.\n  - this should be resolves during the PRD process using best practices.\n\nOperator on 'Should the task identifier (FR-1) use uuid.uuid4() string re':\nsimpler monotonically increasing integer be preferred for readability during pipeline validation\n\nOperator on 'Should the project include a pyproject.toml or setup.cfg at ':\nshould include a include a pyproject.toml at the root\n\nOperator on 'For testing (Section 6), should the agent generate tests usi':\nthis should be resolves during the PRD process using best practices.\n\nOperator on 'How many PRs should the dependency chain be decomposed into ':\nthis should be resolves during the PRD process using best practices.",
   "created_at": 1774732803.2456782,
-  "updated_at": 1774733921.174537,
+  "updated_at": 1774734516.254121,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -64,10 +64,10 @@
       "branch": "",
       "status": "done",
       "engineer_id": "",
-      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/35",
+      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/36",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": 1774733714.2423182,
+      "completed_at": 1774734516.254091,
       "depends_on_prs": [],
       "retry_count": 0,
       "failure_summary": "",
@@ -147,7 +147,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 4,
+  "version": 5,
   "schema_version": 3,
   "agent_version": "39.117.0"
 }
