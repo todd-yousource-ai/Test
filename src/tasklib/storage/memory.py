@@ -273,6 +273,16 @@ class InMemoryTaskStore:
         with self._lock:
             return [self._tasks[task_id] for task_id in self._order]
 
+    def list_tasks(self) -> List[Task]:
+        """List all stored tasks in creation order, oldest first.
+
+        Alias for :meth:`list_all` provided for interface compatibility.
+
+        Returns:
+            A new list of task references in insertion order.
+        """
+        return self.list_all()
+
     def complete(self, task_id: str) -> Task:
         """Mark an existing task as completed and update its modification timestamp.
 
@@ -281,9 +291,21 @@ class InMemoryTaskStore:
             - Completion only mutates the explicitly addressed task.
 
         Failure behavior:
-            - Invalid identifier types or empty identifiers raise immediately.
+            - Invalid identifier types raise ``TypeError``.
+            - Empty identifiers raise ``ValueError``.
             - Unknown identifiers raise ``KeyError(task_id)``.
             - Timestamp updates always use current UTC time.
+
+        Args:
+            task_id: The identifier of the task to complete.
+
+        Returns:
+            The updated ``Task`` with status set to ``TaskStatus.COMPLETED``.
+
+        Raises:
+            TypeError: If ``task_id`` is not a string.
+            ValueError: If ``task_id`` is an empty string.
+            KeyError: If ``task_id`` does not exist in the store.
         """
         _validate_task_id(task_id)
 
@@ -304,9 +326,18 @@ class InMemoryTaskStore:
             - Deletion affects only the explicitly identified task.
 
         Failure behavior:
-            - Invalid identifier types or empty identifiers raise immediately.
+            - Invalid identifier types raise ``TypeError``.
+            - Empty identifiers raise ``ValueError``.
             - Unknown identifiers raise ``KeyError(task_id)``.
             - On success, the task is removed from both storage and ordering indexes.
+
+        Args:
+            task_id: The identifier of the task to delete.
+
+        Raises:
+            TypeError: If ``task_id`` is not a string.
+            ValueError: If ``task_id`` is an empty string.
+            KeyError: If ``task_id`` does not exist in the store.
         """
         _validate_task_id(task_id)
 
