@@ -4,15 +4,22 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB to validate the Crafted Dev Agent build pipeline's ability to close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step. The deliverable is a five-layer dependency chain (docs \u2192 scaffold \u2192 task model \u2192 in-memory store \u2192 CLI) with zero external dependencies, comprising documentation PRs (README, ARCHITECTURE, API), a package scaffold under src/tasklib/, a Task dataclass with TaskStatus enumeration, an InMemoryTaskStore with add/get/list/complete/delete operations, and a CLI entry point supporting add/list/complete commands.\n\nAmbiguity clarifications:\n  - This should be resolved during the PRD process using best practices\n  - This should be resolved during the PRD process using best practices\n  - This should be resolved during the PRD process using best practices\n  - This should be resolved during the PRD process using best practices\n  - This should be resolved during the PRD process using best practices\n\nOperator on 'Should the task identifier use UUIDs (via Python's uuid modu':\nThis should be resolved during the PRD process using best practices\n\nOperator on 'Should the scaffold PR include a pyproject.toml or setup.py ':\nThis should be resolved during the PRD process using best practices\n\nOperator on 'For testing: should tests use only unittest (stdlib) to hono':\nThis should be resolved during the PRD process using best practices\n\nOperator on 'How many PRs should the build be decomposed into? The depend':\nThis should be resolved during the PRD process using best practices",
   "created_at": 1774736516.57405,
-  "updated_at": 1774736516.574125,
+  "updated_at": 1774736863.787413,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
       "prd_id": "PRD-001",
       "title": "Documentation Foundation \u2014 README, ARCHITECTURE, and API Reference for tasklib",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
-      "pr_ids": []
+      "pr_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
     },
     {
       "prd_id": "PRD-002",
@@ -43,9 +50,193 @@
       "pr_ids": []
     }
   ],
-  "pr_entries": {},
+  "pr_entries": {
+    "1": {
+      "prd_id": "PRD-001",
+      "pr_num": 1,
+      "title": "Add tasklib documentation foundation \u2014 README, ARCHITECTURE, and API reference",
+      "branch": "",
+      "status": "available",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Creates the three foundational documentation files under src/tasklib/docs/ that form Layer 0 of the tasklib dependency chain. README.md describes library purpose, package structure, and usage examples. ARCHITECTURE.md describes the five-layer design with dependency diagram. API.md documents Task fields, TaskStatus values, InMemoryTaskStore operations, and CLI commands with arguments and example output. No code is included.",
+      "impl_files": [
+        "src/tasklib/docs/README.md",
+        "src/tasklib/docs/ARCHITECTURE.md",
+        "src/tasklib/docs/API.md"
+      ],
+      "test_files": [],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "2": {
+      "prd_id": "PRD-001",
+      "pr_num": 2,
+      "title": "Add tasklib package scaffold",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        1
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Creates the minimal src/tasklib package skeleton and CLI package directories required for downstream implementation without adding runtime logic. Only __init__.py files and test directory markers.",
+      "impl_files": [
+        "src/tasklib/__init__.py",
+        "src/tasklib/cli/__init__.py",
+        "tests/tasklib/__init__.py",
+        "tests/tasklib/cli/__init__.py"
+      ],
+      "test_files": [],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "3": {
+      "prd_id": "PRD-001",
+      "pr_num": 3,
+      "title": "Implement tasklib core task model types",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        2
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Defines the TaskStatus enumeration and Task dataclass that serve as the core public data model for tasklib, matching the contracts specified in the API documentation.",
+      "impl_files": [
+        "src/tasklib/task.py"
+      ],
+      "test_files": [
+        "tests/tasklib/test_task.py"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "4": {
+      "prd_id": "PRD-001",
+      "pr_num": 4,
+      "title": "Implement in-memory task store",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        3
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Adds InMemoryTaskStore with add, get, list, complete, and delete operations using the Task model contracts from PR-3. All operations are validated against the documented API behavior.",
+      "impl_files": [
+        "src/tasklib/store.py"
+      ],
+      "test_files": [
+        "tests/tasklib/test_store.py"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "5": {
+      "prd_id": "PRD-001",
+      "pr_num": 5,
+      "title": "Implement tasklib CLI entry point",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        4
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Adds a standard-library-only CLI supporting add, list, and complete commands backed by the in-memory task store and matching the documented CLI behavior in API.md.",
+      "impl_files": [
+        "src/tasklib/cli/main.py"
+      ],
+      "test_files": [
+        "tests/tasklib/cli/test_main.py"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "medium",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "6": {
+      "prd_id": "PRD-001",
+      "pr_num": 6,
+      "title": "Add tasklib end-to-end integration tests",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        5
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Adds focused integration tests validating the complete dependency chain from Task model through InMemoryTaskStore to CLI command behavior, ensuring all layers conform to the documented API contracts.",
+      "impl_files": [],
+      "test_files": [
+        "tests/tasklib/test_integration_chain.py"
+      ],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    }
+  },
   "knowledge_notes": [],
-  "version": 1,
+  "version": 2,
   "schema_version": 3,
   "agent_version": "39.119.0"
 }
