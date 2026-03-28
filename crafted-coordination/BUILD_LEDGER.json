@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore with add/get/list/complete/delete operations (FR-8 through FR-14), a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), and a package root re-exporting the public API (FR-20). The purpose is to validate the Crafted Dev Agent build pipeline's ability to close a complete dependency chain \u2014 docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI \u2014 with real merges at each step.\n\nOperator on 'Should the dependency chain be decomposed into exactly 5 PRs':\nbuild the PRDs in the way that works best for code development\n\nOperator on 'For the Task identifier (FR-1), should we use UUID4 strings ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Should tests be included in each component PR alongside the ':\nuse the PRD process to determine and resolve any gaps. Use best practices.\n\nOperator on 'Is there a target Python version (e.g., 3.10+ for match stat':\nPython 3.11+ 3.14.0",
   "created_at": 1774720319.932831,
-  "updated_at": 1774722050.328901,
+  "updated_at": 1774724276.621346,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -22,9 +22,15 @@
     {
       "prd_id": "PRD-002",
       "title": "Package Scaffold \u2014 src/tasklib/ Directory Tree with pyproject.toml",
-      "status": "pending",
+      "status": "in_progress",
       "engineer_id": "",
-      "pr_ids": []
+      "pr_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
     },
     {
       "prd_id": "PRD-003",
@@ -64,9 +70,9 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "crafted-coordination/impl-journal/PR-001.md",
-      "summary": "Creates README.md at the repository root. Describes the tasklib library's purpose (validation of the Crafted Dev Agent build pipeline), the src/tasklib/ package structure with models/ and storage/ subpackages, installation instructions via editable install (`pip install -e .`), and a working Python 3.11+ usage example demonstrating Task creation, InMemoryTaskStore operations, and CLI invocation. No Python source files are created.",
+      "summary": "Creates the repository-root pyproject.toml declaring name='tasklib', version='0.1.0', requires-python='>=3.11', zero external dependencies, src-layout package discovery, and the [project.scripts] entry point tasklib='tasklib.cli:main'. No Python source files are included \u2014 this PR contains only the build/packaging configuration.",
       "impl_files": [
-        "README.md"
+        "pyproject.toml"
       ],
       "test_files": [],
       "language": "python",
@@ -91,9 +97,11 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "crafted-coordination/impl-journal/PR-002.md",
-      "summary": "Creates ARCHITECTURE.md at the repository root. Documents the four-layer dependency chain (docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI) with an ASCII diagram, the zero-external-dependency constraint, the Python 3.11+ target, and the rationale for each layer boundary. Describes how each layer validates a different pipeline capability (doc-only merge, scaffold merge, model import, storage integration, CLI entry point). No Python source files are created.",
+      "summary": "Creates foundational documentation including README.md, docs/ARCHITECTURE.md, and docs/API_REFERENCE.md describing the tasklib package purpose, directory layout, public API surface, and design decisions. No code files included.",
       "impl_files": [
-        "ARCHITECTURE.md"
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/API_REFERENCE.md"
       ],
       "test_files": [],
       "language": "python",
@@ -118,9 +126,11 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "crafted-coordination/impl-journal/PR-003.md",
-      "summary": "Creates API.md at the repository root. Documents every public symbol: TaskStatus enum (PENDING, IN_PROGRESS, COMPLETE), Task dataclass (all fields, types, defaults, constraints including UUID4 id generation and datetime timestamps), InMemoryTaskStore (add/get/list/complete/delete method signatures with parameter types, return types, and exception behavior), serialization contracts (to_dict/from_dict), and CLI commands (add/list/complete) with argument formats and expected stdout output. No Python source files are created.",
+      "summary": "Creates the src-layout directory tree: src/tasklib/__init__.py, src/tasklib/models/__init__.py, and src/tasklib/storage/__init__.py. Each __init__.py contains only a module-level docstring describing the package's purpose and an __all__ = [] declaration. No executable code, no submodule imports, no re-exports. This establishes all three importable package paths that downstream PRs depend on.",
       "impl_files": [
-        "API.md"
+        "src/tasklib/__init__.py",
+        "src/tasklib/models/__init__.py",
+        "src/tasklib/storage/__init__.py"
       ],
       "test_files": [],
       "language": "python",
@@ -149,10 +159,44 @@
       "retry_count": 0,
       "failure_summary": "",
       "journal_path": "",
-      "summary": "Adds tests that validate the three documentation files exist at the repository root and contain required sections. Checks README.md for installation and usage sections, ARCHITECTURE.md for the dependency chain diagram and zero-dependency constraint, and API.md for all public class/method headings (Task, TaskStatus, InMemoryTaskStore, add, get, list_tasks, complete, delete, to_dict, from_dict, CLI commands). Tests are pure Python using only stdlib (pathlib, re, unittest).",
-      "impl_files": [],
+      "summary": "Creates three placeholder modules: src/tasklib/models/task.py, src/tasklib/storage/store.py, and src/tasklib/cli.py. Each file contains only a module-level docstring describing its future purpose. No classes, functions, imports, or executable code are defined. This separates package structure from leaf module content.",
+      "impl_files": [
+        "src/tasklib/models/task.py",
+        "src/tasklib/storage/store.py",
+        "src/tasklib/cli.py"
+      ],
+      "test_files": [],
+      "language": "python",
+      "framework": "pytest",
+      "security_critical": false,
+      "estimated_complexity": "low",
+      "acceptance_criteria": [],
+      "impl_plan": {}
+    },
+    "5": {
+      "prd_id": "PRD-002",
+      "pr_num": 5,
+      "title": "Add scaffold import verification tests",
+      "branch": "",
+      "status": "blocked",
+      "engineer_id": "",
+      "pr_url": null,
+      "claimed_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "depends_on_prs": [
+        4
+      ],
+      "retry_count": 0,
+      "failure_summary": "",
+      "journal_path": "",
+      "summary": "Creates tests/__init__.py and tests/test_scaffold.py verifying: (1) 'import tasklib' succeeds, (2) 'import tasklib.models' succeeds, (3) 'import tasklib.storage' succeeds, (4) 'import tasklib.cli' succeeds, (5) 'import tasklib.models.task' succeeds, (6) 'import tasklib.storage.store' succeeds, (7) none of the imported modules expose unexpected public names.",
+      "impl_files": [
+        "tests/__init__.py",
+        "tests/test_scaffold.py"
+      ],
       "test_files": [
-        "tests/test_documentation.py"
+        "tests/test_scaffold.py"
       ],
       "language": "python",
       "framework": "pytest",
@@ -163,7 +207,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 5,
+  "version": 6,
   "schema_version": 3,
   "agent_version": "39.108.0"
 }
