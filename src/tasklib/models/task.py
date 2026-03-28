@@ -94,6 +94,13 @@ class Task:
     def __post_init__(self) -> None:
         """Validate all fields immediately after construction.
 
-        Fails closed on any invalid input -- no silent coercion.
+        Fail-closed validation: every invalid input raises an explicit
+        exception with a descriptive message. No silent coercion.
+
+        Raises:
+            TypeError: If ``title`` is not a ``str``.
+            ValueError: If ``title`` is empty or whitespace-only.
+            TypeError: If ``description`` is not ``None`` and not a ``str``.
+            TypeError: If ``status`` is not a ``TaskStatus`` instance.
         """
         #
