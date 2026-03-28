@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (FR-1 through FR-7), an InMemoryTaskStore implementing add/get/list/complete/delete operations (FR-8 through FR-14), and a CLI entry point supporting add/list/complete commands (FR-15 through FR-19), with the package root re-exporting the public API (FR-20). The entire library uses zero external dependencies (NFR-1) and the build is decomposed to validate the Crafted Dev Agent pipeline's ability to close a full dependency chain: docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI.\n\nOperator on 'Should the PR decomposition follow the exact 5-step dependen':\nthe agent free to combine steps as long as the dependency ordering is preserved and the per-PR limits (\u22643 implementation files, \u22646 acceptance criteria) from \u00a76 are respected\n\nOperator on 'For the unique task identifier (FR-1), should the implementa':\nuse the PRD process to fill in any gaps using best practices\n\nOperator on 'Should tests be co-located in each component PR (e.g., tests':\nleverage best practices",
   "created_at": 1774651647.2342458,
-  "updated_at": 1774656663.490399,
+  "updated_at": 1774662831.735273,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -219,18 +219,18 @@
       "pr_num": 6,
       "title": "Wire public API re-exports from package root",
       "branch": "",
-      "status": "blocked",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/20",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774662831.734968,
       "depends_on_prs": [
         5
       ],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "crafted-coordination/impl-journal/PR-006.md",
       "summary": "Updates src/tasklib/__init__.py to re-export Task, TaskStatus, and InMemoryTaskStore as the public API surface (FR-20). Defines __all__ to restrict wildcard imports to exactly these three symbols. Adds tests verifying that 'from tasklib import Task, TaskStatus, InMemoryTaskStore' works and that __all__ matches the documented API.",
       "impl_files": [
         "src/tasklib/__init__.py"
@@ -250,7 +250,7 @@
       "pr_num": 7,
       "title": "Implement CLI entry point with add, list, and complete commands",
       "branch": "",
-      "status": "blocked",
+      "status": "available",
       "engineer_id": "",
       "pr_url": null,
       "claimed_at": null,
@@ -308,7 +308,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 6,
+  "version": 7,
   "schema_version": 3,
   "agent_version": "39.96.0"
 }
