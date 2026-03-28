@@ -1,18 +1,123 @@
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.backends.legacy:build"
+import sys
+from pathlib import Path
 
-[project]
-name = "forge-validation"
-version = "0.1.0"
-requires-python = ">=3.11"
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
-asyncio_mode = "auto"
-addopts = "-v --tb=short"
+import pytest
 
-[tool.coverage.run]
-source = ["src"]
-omit = ["tests/*"]
+PROJECT_ROOT = next(
+    p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").exists()
+)
+
+
+@pytest.fixture(scope="module")
+def parsed_pyproject():
+    pyproject_path = PROJECT_ROOT / "pyproject.toml"
+    with open(pyproject_path, "rb") as f:
+        return tomllib.load(f)
+
+
+class TestPyprojectExistsAndValid:
+    def test_pyproject_exists_and_is_valid_toml(self):
+        pyproject_path = PROJECT_ROOT / "pyproject.toml"
+        assert pyproject_path.exists(), "pyproject.toml must exist at project root"
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+        assert isinstance(data, dict), "pyproject.toml must parse to a dict"
+
+
+class TestProjectMetadata:
+    def test_project_name_is_tasklib(self, parsed_pyproject):
+        assert parsed_pyproject["project"]["name"] == "tasklib"
+
+    def test_project_version_is_0_1_0(self, parsed_pyproject):
+        assert parsed_pyproject["project"]["version"] == "0.1.0"
+
+    def test_requires_python_gte_310(self, parsed_pyproject):
+        assert parsed_pyproject["project"]["requires-python"] == ">=3.10"
+
+    def test_dependencies_list_is_empty(self, parsed_pyproject):
+        assert parsed_pyproject["project"]["dependencies"] == []
+
+
+class TestBuildSystem:
+    def test_build_backend_is_hatchling(self, parsed_pyproject):
+        assert parsed_pyproject["build-system"]["build-backend"] == "hatchling.build"
+
+    def test_build_system_requires_hatchling(self, parsed_pyproject):
+        requires = parsed_pyproject["build-system"]["requires"]
+        assert "hatchling" in requires
+
+
+class TestConsoleScripts:
+    def test_console_script_entry_point(self, parsed_pyproject):
+        scripts = parsed_pyproject["project"]["scripts"]
+        assert scripts["tasklib"] == "tasklib.cli:main"
+
+
+class TestHatchBuildConfig:
+    def test_hatch_wheel_sources_is_src(self, parsed_pyproject):
+        sources = parsed_pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["sources"]
+        assert "src" in sources
+
+
+class TestOptionalDependencies:
+    def test_dev_optional_deps_contains_pytest(self, parsed_pyproject):
+        dev_deps = parsed_pyproject["project"]["optional-dependencies"]["dev"]
+        assert any(
+            dep.startswith("pytest") for dep in dev_deps
+        ), f"Expected a 'pytest' dependency in dev optional-dependencies, got: {dev_deps}"
+
+
+class TestNegativeCases:
+    def test_no_setup_py_exists(self):
+        setup_py = PROJECT_ROOT / "setup.py"
+        assert not setup_py.exists(), (
+            "setup.py should not exist -- pyproject.toml is the single build config"
+        )
+
+    def test_no_setup_cfg_exists(self):
+        setup_cfg = PROJECT_ROOT / "setup.cfg"
+        assert not setup_cfg.exists(), (
+            "setup.cfg should not exist -- pyproject.toml is the single build config"
+        )
+
+    def test_dependencies_contains_no_external_packages(self, parsed_pyproject):
+        deps = parsed_pyproject["project"]["dependencies"]
+        assert len(deps) == 0, (
+            f"dependencies list must be empty, but found: {deps}"
+        )
+
+
+class TestSecurity:
+    def test_no_external_runtime_dependencies(self, parsed_pyproject):
+        # Verify runtime dependencies are empty
+        runtime_deps = parsed_pyproject["project"]["dependencies"]
+        assert runtime_deps == [], (
+            f"No external runtime dependencies should be declared, found: {runtime_deps}"
+        )
+
+        # Verify build-system requires contains only hatchling and nothing unexpected
+        build_requires = parsed_pyproject["build-system"]["requires"]
+        allowed_build_requires = {"hatchling"}
+        for req in build_requires:
+            # Extract the package name (before any version specifier)
+            pkg_name = req.split(">=")[0].split("<=")[0].split("==")[0].split("!=")[0].split("[")[0].split("<")[0].split(">")[0].strip()
+            assert pkg_name in allowed_build_requires, (
+                f"Unexpected build-system requirement '{req}' -- only {allowed_build_requires} are allowed. "
+                f"This could be a dependency injection vector."
+            )
+
+    def test_build_system_requires_is_minimal(self, parsed_pyproject):
+        """Ensure build-system.requires has exactly one entry: hatchling."""
+        build_requires = parsed_pyproject["build-system"]["requires"]
+        assert len(build_requires) == 1, (
+            f"build-system.requires should contain exactly 1 entry, found {len(build_requires)}: {build_requires}"
+        )
+        assert build_requires[0] == "hatchling"
