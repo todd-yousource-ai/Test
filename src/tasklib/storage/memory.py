@@ -40,13 +40,31 @@ class TaskStatus(Enum):
 
 
 def _parse_datetime(value: Any, field_name: str) -> datetime:
-    """Coerce *value* to a timezone-aware datetime.
+    """Coerce *value* to a timezone-aware ``datetime``.
 
-    Accepts ``datetime`` instances directly and ISO-8601 strings (as produced
-    by ``datetime.isoformat()``).  Returns a timezone-aware ``datetime`` or
-    raises ``TypeError`` / ``ValueError`` with a clear message.
+    Accepts ``datetime`` instances and ISO-8601 strings (as produced by
+    ``datetime.isoformat()``).  The returned value is **always**
+    timezone-aware; naive datetimes and strings that parse to naive
+    datetimes are rejected outright so that all timestamps in the domain
+    model carry an unambiguous instant in time.
+
+    Args:
+        value: A ``datetime`` object or an ISO-8601 formatted string.
+        field_name: Human-readable field name used in error messages.
+
+    Returns:
+        A timezone-aware ``datetime``.
+
+    Raises:
+        TypeError: If *value* is neither a ``datetime`` nor a ``str``.
+        ValueError: If a string cannot be parsed as ISO-8601 or if the
+            resulting ``datetime`` is naive (has no ``tzinfo``).
     """
     if isinstance(value, datetime):
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            raise ValueError(
+                f"{field_name} must be timezone-aware, got naive datetime: {value!r}"
+            )
         return value
     if isinstance(value, str):
         try:
@@ -55,6 +73,11 @@ def _parse_datetime(value: Any, field_name: str) -> datetime:
             raise ValueError(
                 f"{field_name} string is not valid ISO-8601: {value!r}"
             ) from exc
+        if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+            raise ValueError(
+                f"{field_name} must be timezone-aware, got naive datetime "
+                f"from string: {value!r}"
+            )
         return parsed
     raise TypeError(
         f"{field_name} must be a datetime or ISO-8601 string, "
@@ -86,160 +109,222 @@ class Task:
     updated_at: Optional[datetime] = field(default=None)
 
     def __post_init__(self) -> None:
-        """Validate all fields eagerly and fail closed on invalid data."""
-        if not isinstance(self.title, str):
-            raise TypeError(f"title must be a str, got {type(self.title).__name__}")
-        if not self.title.strip():
-            raise ValueError("title must be a non-empty string")
+        """Validate and normalise all fields immediately after construction.
 
+        Every field is checked for correct type and, where applicable,
+        correct value.  This method runs automatically after
+        ``__init__`` and ensures no ``Task`` instance can exist with
+        invalid or inconsistent state.
+
+        Raises:
+            TypeError: If *title* is not a ``str``, *id* is not a ``str``,
+                *status* is not a ``TaskStatus``, or timestamp fields are
+                not ``datetime``/ISO-8601 strings.
+            ValueError: If *title* is empty or blank, *id* is empty or
+                blank, timestamp strings are malformed, or timestamps
+                are naive (missing timezone information).
+        """
+        # -- title --
+        if not isinstance(self.title, str):
+            raise TypeError(
+                f"title must be a str, got {type(self.title).__name__}"
+            )
+        if not self.title.strip():
+            raise ValueError("title must not be empty or blank")
+
+        # -- id --
         if not isinstance(self.id, str):
             raise TypeError(f"id must be a str, got {type(self.id).__name__}")
-        if not self.id:
-            raise ValueError("id must be a non-empty string")
+        if not self.id.strip():
+            raise ValueError("id must not be empty or blank")
 
+        # -- status --
+        if isinstance(self.status, str):
+            try:
+                self.status = TaskStatus(self.status)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid status string: {self.status!r}"
+                ) from exc
         if not isinstance(self.status, TaskStatus):
             raise TypeError(
                 f"status must be a TaskStatus, got {type(self.status).__name__}"
             )
 
-        if not isinstance(self.created_at, datetime):
-            raise TypeError(
-                "created_at must be a datetime, "
-                f"got {type(self.created_at).__name__}"
-            )
-        if self.created_at.tzinfo is None:
-            raise ValueError("created_at must be timezone-aware")
+        # -- created_at --
+        self.created_at = _parse_datetime(self.created_at, "created_at")
 
+        # -- updated_at --
         if self.updated_at is not None:
-            if not isinstance(self.updated_at, datetime):
-                raise TypeError(
-                    "updated_at must be a datetime or None, "
-                    f"got {type(self.updated_at).__name__}"
-                )
-            if self.updated_at.tzinfo is None:
-                raise ValueError("updated_at must be timezone-aware when provided")
+            self.updated_at = _parse_datetime(self.updated_at, "updated_at")
+
+    # ---- serialisation helpers ----
 
     def to_dict(self) -> Dict[str, Any]:
-        """Serialize the task to a dictionary with enum values normalized."""
+        """Return a plain-dict representation suitable for JSON encoding.
+
+        ``status`` is stored as its string value; ``created_at`` and
+        ``updated_at`` are ISO-8601 strings (always timezone-aware).
+
+        Returns:
+            A ``dict`` with string keys and JSON-serialisable values.
+        """
         data = asdict(self)
         data["status"] = self.status.value
+        data["created_at"] = self.created_at.isoformat()
+        if self.updated_at is not None:
+            data["updated_at"] = self.updated_at.isoformat()
+        else:
+            data["updated_at"] = None
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Task:
-        """Deserialize a Task from a validated dictionary payload.
+    def from_dict(cls, data: Dict[str, Any]) -> "Task":
+        """Reconstruct a ``Task`` from a dict previously produced by :meth:`to_dict`.
 
-        Accepts both ``datetime`` objects and ISO-8601 strings for the
-        *created_at* and *updated_at* fields so that round-tripping through
-        ``to_dict`` (and any intermediate JSON serialization) works reliably.
+        All validation in ``__post_init__`` applies, so round-tripping
+        through ``to_dict`` / ``from_dict`` is safe and will surface any
+        corruption immediately.
+
+        Args:
+            data: A dictionary containing at least ``title`` and ``id``
+                keys, plus optional ``status``, ``created_at``, and
+                ``updated_at``.
+
+        Returns:
+            A fully validated :class:`Task` instance.
+
+        Raises:
+            TypeError: If *data* is not a dict.
+            KeyError: If required keys are missing.
         """
         if not isinstance(data, dict):
-            raise TypeError(f"data must be a dict, got {type(data).__name__}")
-
-        required_keys = {"title", "id", "status", "created_at"}
-        missing = required_keys - data.keys()
-        if missing:
-            raise ValueError(f"missing required task fields: {sorted(missing)}")
-
-        status_value = data["status"]
-        try:
-            status = TaskStatus(status_value)
-        except ValueError as exc:
-            raise ValueError(f"invalid task status: {status_value!r}") from exc
-
-        created_at = _parse_datetime(data["created_at"], "created_at")
-
-        raw_updated = data.get("updated_at")
-        if raw_updated is not None:
-            updated_at: Optional[datetime] = _parse_datetime(
-                raw_updated, "updated_at"
+            raise TypeError(
+                f"from_dict expects a dict, got {type(data).__name__}"
             )
-        else:
-            updated_at = None
-
         return cls(
             title=data["title"],
             id=data["id"],
-            status=status,
-            created_at=created_at,
-            updated_at=updated_at,
+            status=data["status"],
+            created_at=data["created_at"],
+            updated_at=data.get("updated_at"),
         )
 
 
 class InMemoryTaskStore:
-    """Thread-safe in-memory task store.
+    """Thread-safe in-memory store for :class:`Task` objects.
+
+    Maintains insertion order so that :meth:`list_all` returns tasks sorted
+    oldest-first (by insertion time).
 
     Security assumptions:
-        - This store is process-local and does not persist data.
-        - Callers provide untrusted task titles and task IDs; titles are
-          validated by Task and IDs are matched exactly against stored values.
+        - All task IDs are treated as opaque strings; never interpreted as
+          paths, SQL, or shell input.
+        - Callers cannot inject tasks with duplicate IDs because IDs are
+          auto-generated via uuid4.
 
     Failure behavior:
-        - Missing task IDs raise KeyError for complete/delete and return None for get.
-        - Invalid task construction fails immediately.
-        - No mutation path silently ignores errors.
+        - ``get`` returns ``None`` for missing IDs (no exception).
+        - ``complete`` raises ``KeyError`` for missing IDs (fail closed).
+        - ``delete`` raises ``KeyError`` for missing IDs (fail closed).
+        - All mutations are serialised through a threading lock.
     """
 
     def __init__(self) -> None:
-        """Initialize an empty task store protected by a re-entrant lock."""
         self._tasks: Dict[str, Task] = {}
-        self._order: List[str] = []
-        self._lock = threading.RLock()
+        self._lock = threading.Lock()
 
     def add(self, title: str) -> Task:
-        """Create, store, and return a new task."""
+        """Create a new task with the given *title* and store it.
+
+        Args:
+            title: Non-empty string for the task title.
+
+        Returns:
+            The newly created :class:`Task`.
+
+        Raises:
+            TypeError: If *title* is not a string.
+            ValueError: If *title* is empty or blank.
+        """
         task = Task(title=title)
         with self._lock:
             self._tasks[task.id] = task
-            self._order.append(task.id)
         return task
 
     def get(self, task_id: str) -> Optional[Task]:
-        """Return the task for *task_id*, or None if it does not exist."""
-        if not isinstance(task_id, str):
-            raise TypeError(f"task_id must be a str, got {type(task_id).__name__}")
+        """Retrieve a task by its identifier.
+
+        Args:
+            task_id: The unique identifier of the task.
+
+        Returns:
+            The matching :class:`Task`, or ``None`` if not found.
+        """
         with self._lock:
             return self._tasks.get(task_id)
 
     def list_all(self) -> List[Task]:
-        """Return all tasks in creation order, oldest first."""
+        """Return all tasks in insertion order (oldest first).
+
+        Returns:
+            A new list of all stored :class:`Task` objects.
+        """
         with self._lock:
-            return [self._tasks[task_id] for task_id in self._order]
+            return list(self._tasks.values())
 
     def complete(self, task_id: str) -> Task:
-        """Mark an existing task as completed and update its mutation timestamp.
+        """Mark a task as completed by its identifier.
+
+        Sets the task's status to ``TaskStatus.COMPLETED`` and updates
+        ``updated_at`` to the current UTC timestamp.
+
+        Args:
+            task_id: The unique identifier of the task to complete.
+
+        Returns:
+            The updated :class:`Task` with ``COMPLETED`` status.
+
+        Raises:
+            KeyError: If *task_id* does not exist in the store.
+                Fails closed -- no partial state change occurs for
+                non-existent tasks.
 
         Security assumptions:
-            - task_id is untrusted input and must be an exact string key match.
-
-        Failure behavior:
-            - Raises TypeError if task_id is not a string.
-            - Raises KeyError if the task does not exist.
-            - Never creates implicit tasks or ignores missing identifiers.
+            - Only the targeted task is mutated; all other tasks are
+              unchanged.
+            - The lock ensures no concurrent mutation can interleave.
         """
-        if not isinstance(task_id, str):
-            raise TypeError(f"task_id must be a str, got {type(task_id).__name__}")
-
         with self._lock:
+            if task_id not in self._tasks:
+                raise KeyError(task_id)
             task = self._tasks[task_id]
             task.status = TaskStatus.COMPLETED
             task.updated_at = datetime.now(timezone.utc)
             return task
 
     def delete(self, task_id: str) -> None:
-        """Remove an existing task from the store.
+        """Remove a task from the store by its identifier.
+
+        The task is looked up explicitly before removal so that a missing
+        *task_id* always raises ``KeyError`` with a clear, predictable
+        control flow rather than relying on the internal dict's own
+        exception propagation.
+
+        Args:
+            task_id: The unique identifier of the task to delete.
+
+        Raises:
+            KeyError: If *task_id* does not exist in the store.
+                Fails closed -- no state change occurs for non-existent
+                task IDs.
 
         Security assumptions:
-            - task_id is untrusted input and must be an exact string key match.
-
-        Failure behavior:
-            - Raises TypeError if task_id is not a string.
-            - Raises KeyError if the task does not exist.
-            - Deletes only the addressed task and preserves all others.
+            - Only the targeted task is removed; all other tasks are
+              unchanged.
+            - The lock ensures no concurrent mutation can interleave.
         """
-        if not isinstance(task_id, str):
-            raise TypeError(f"task_id must be a str, got {type(task_id).__name__}")
-
         with self._lock:
+            if task_id not in self._tasks:
+                raise KeyError(task_id)
             del self._tasks[task_id]
-            self._order.remove(task_id)
