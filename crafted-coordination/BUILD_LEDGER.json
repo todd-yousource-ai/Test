@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB to validate the Crafted Dev Agent build pipeline's ability to close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step. The deliverable is a five-layer dependency chain (docs \u2192 scaffold \u2192 task model \u2192 in-memory store \u2192 CLI) with zero external dependencies, comprising documentation PRs (README, ARCHITECTURE, API), a package scaffold under src/tasklib/, a Task dataclass with TaskStatus enumeration, an InMemoryTaskStore with add/get/list/complete/delete operations, and a CLI entry point supporting add/list/complete commands.\n\nAmbiguity clarifications:\n  - This should be resolved during the PRD process using best practices\n  - This should be resolved during the PRD process using best practices\n  - This should be resolved during the PRD process using best practices\n  - This should be resolved during the PRD process using best practices\n  - This should be resolved during the PRD process using best practices\n\nOperator on 'Should the task identifier use UUIDs (via Python's uuid modu':\nThis should be resolved during the PRD process using best practices\n\nOperator on 'Should the scaffold PR include a pyproject.toml or setup.py ':\nThis should be resolved during the PRD process using best practices\n\nOperator on 'For testing: should tests use only unittest (stdlib) to hono':\nThis should be resolved during the PRD process using best practices\n\nOperator on 'How many PRs should the build be decomposed into? The depend':\nThis should be resolved during the PRD process using best practices",
   "created_at": 1774736516.57405,
-  "updated_at": 1774737949.03278,
+  "updated_at": 1774740500.582072,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -85,18 +85,18 @@
       "pr_num": 2,
       "title": "Add tasklib package scaffold",
       "branch": "",
-      "status": "available",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/40",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774740500.5817542,
       "depends_on_prs": [
         1
       ],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "crafted-coordination/impl-journal/PR-002.md",
       "summary": "Creates the minimal src/tasklib package skeleton and CLI package directories required for downstream implementation without adding runtime logic. Only __init__.py files and test directory markers.",
       "impl_files": [
         "src/tasklib/__init__.py",
@@ -117,7 +117,7 @@
       "pr_num": 3,
       "title": "Implement tasklib core task model types",
       "branch": "",
-      "status": "blocked",
+      "status": "available",
       "engineer_id": "",
       "pr_url": null,
       "claimed_at": null,
@@ -236,7 +236,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 3,
+  "version": 4,
   "schema_version": 3,
   "agent_version": "39.119.0"
 }
