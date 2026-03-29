@@ -41,18 +41,12 @@ class TaskStatus(str, Enum):
 
 def _generate_id() -> str:
     """Generate a unique task identifier using uuid4 hex."""
-    result = uuid4().hex
-    if not result:
-        raise ValueError("uuid4().hex produced empty string")
-    return result
+    return uuid4().hex
 
 
 def _generate_created_at() -> str:
     """Generate an ISO-8601 UTC timestamp for task creation time."""
-    result = datetime.now(timezone.utc).isoformat()
-    if not result:
-        raise ValueError("datetime isoformat() produced empty string")
-    return result
+    return datetime.now(timezone.utc).isoformat()
 
 
 @dataclass(frozen=True)
@@ -85,54 +79,64 @@ class Task:
     def __post_init__(self) -> None:
         """Validate fields after construction.
 
-        All validation failures raise ValueError with context.
-        String status values are coerced to TaskStatus enum members.
+        All validation failures raise ValueError with descriptive context.
+        Uses object.__setattr__ on frozen dataclass to coerce status strings
+        to TaskStatus enum members when a plain string is provided.
+
+        Validation order: type checks precede emptiness checks so that
+        non-string values are caught before any string method is called.
         """
-        # Validate title
+        # Validate title: type first, then emptiness
         if not isinstance(self.title, str):
             raise ValueError(
                 f"Task title must be a string, got {type(self.title).__name__}"
             )
         if not self.title.strip():
-            raise ValueError("Task title must be a non-empty string")
+            raise ValueError("Task title must be non-empty")
 
-        # Validate id
+        # Validate id: type first, then emptiness
         if not isinstance(self.id, str):
             raise ValueError(
                 f"Task id must be a string, got {type(self.id).__name__}"
             )
         if not self.id.strip():
-            raise ValueError("Task id must be a non-empty string")
+            raise ValueError("Task id must be non-empty")
 
-        # Validate status -- coerce str to TaskStatus if needed, fail on invalid
-        if isinstance(self.status, str) and not isinstance(self.status, TaskStatus):
+        # Coerce status from string to TaskStatus if needed, fail on invalid.
+        # Check non-TaskStatus types first to reject integers, None, etc.
+        # before attempting string coercion.
+        if isinstance(self.status, TaskStatus):
+            pass
+        elif isinstance(self.status, str):
             try:
                 coerced = TaskStatus(self.status)
             except ValueError:
                 raise ValueError(
                     f"Invalid task status: {self.status!r}. "
-                    f"Must be one of: {[s.value for s in TaskStatus]}"
-                ) from None
+                    f"Valid values: {[s.value for s in TaskStatus]}"
+                )
             object.__setattr__(self, "status", coerced)
-        elif not isinstance(self.status, TaskStatus):
+        else:
             raise ValueError(
-                f"Task status must be a TaskStatus enum, got {type(self.status).__name__}"
+                f"Task status must be a TaskStatus enum or valid string, "
+                f"got {type(self.status).__name__}"
             )
 
-        # Validate created_at
+        # Validate created_at: type first, then emptiness
         if not isinstance(self.created_at, str):
             raise ValueError(
                 f"Task created_at must be a string, got {type(self.created_at).__name__}"
             )
         if not self.created_at.strip():
-            raise ValueError("Task created_at must be a non-empty string")
+            raise ValueError("Task created_at must be non-empty")
 
     def to_dict(self) -> dict[str, str]:
-        """Serialize this Task to a plain dictionary with string values.
+        """Serialize the task to a plain dictionary with string values.
 
         Returns:
-            dict[str, str]: Dictionary with keys 'id', 'title', 'status',
-                'created_at', all with string values.
+            A dict with keys 'id', 'title', 'status', 'created_at',
+            all with string values. The status value is the plain
+            lowercase string (e.g. 'pending'), not the enum repr.
         """
         return {
             "id": self.id,
@@ -145,18 +149,18 @@ class Task:
     def from_dict(cls, data: dict[str, Any]) -> Task:
         """Reconstruct a Task from a dictionary.
 
-        All input is treated as untrusted and validated strictly.
-        Unknown keys are rejected. Missing required keys raise ValueError.
+        All input is treated as untrusted. Unknown keys are rejected.
+        Missing required keys raise ValueError. Invalid values raise ValueError.
 
         Args:
-            data: Dictionary with keys 'id', 'title', 'status', 'created_at'.
+            data: A dict with keys 'id', 'title', 'status', 'created_at'.
 
         Returns:
-            Task: A new Task instance matching the provided data.
+            A new Task instance matching the provided values.
 
         Raises:
-            ValueError: If data is not a dict, has unknown keys, is missing
-                required keys, or contains invalid values.
+            ValueError: If data is not a dict, has missing/extra keys,
+                or contains invalid field values.
         """
         if not isinstance(data, dict):
             raise ValueError(
@@ -166,19 +170,19 @@ class Task:
         expected_keys = {"id", "title", "status", "created_at"}
         actual_keys = set(data.keys())
 
-        unknown_keys = actual_keys - expected_keys
-        if unknown_keys:
+        missing = expected_keys - actual_keys
+        if missing:
             raise ValueError(
-                f"Task.from_dict() received unknown keys: {sorted(unknown_keys)}"
+                f"Task.from_dict() missing required keys: {sorted(missing)}"
             )
 
-        missing_keys = expected_keys - actual_keys
-        if missing_keys:
+        extra = actual_keys - expected_keys
+        if extra:
             raise ValueError(
-                f"Task.from_dict() missing required keys: {sorted(missing_keys)}"
+                f"Task.from_dict() received unexpected keys: {sorted(extra)}"
             )
 
-        # Validate all values are strings before constructing
+        # Validate all values are strings before passing to constructor
         for key in expected_keys:
             if not isinstance(data[key], str):
                 raise ValueError(
@@ -192,8 +196,8 @@ class Task:
         except ValueError:
             raise ValueError(
                 f"Task.from_dict() invalid status: {data['status']!r}. "
-                f"Must be one of: {[s.value for s in TaskStatus]}"
-            ) from None
+                f"Valid values: {[s.value for s in TaskStatus]}"
+            )
 
         return cls(
             id=data["id"],
