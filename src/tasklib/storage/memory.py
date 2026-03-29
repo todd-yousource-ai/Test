@@ -86,7 +86,7 @@ class InMemoryTaskStore:
         return copy.deepcopy(self._tasks[task.id])
 
     def get(self, task_id: str) -> Task:
-        """Return a deep copy of the task identified by *task_id*.
+        """Retrieve a task by its identifier.
 
         Parameters
         ----------
@@ -96,13 +96,13 @@ class InMemoryTaskStore:
         Returns
         -------
         Task
-            A deep copy of the stored task.
+            A deep copy of the matching task.
 
         Raises
         ------
         KeyError
-            If no task with *task_id* exists.  Fails closed -- never returns
-            ``None`` for a missing ID.
+            If no task with *task_id* exists in the store.
+            Fails closed -- never returns ``None`` for a missing ID.
         """
         if task_id not in self._tasks:
             raise KeyError(
@@ -111,34 +111,32 @@ class InMemoryTaskStore:
         return copy.deepcopy(self._tasks[task_id])
 
     def list_all(self) -> list[Task]:
-        """Return deep copies of every stored task in insertion order.
+        """Return all stored tasks in insertion order.
 
         Returns
         -------
         list[Task]
-            All tasks currently in the store, ordered by insertion time
+            Deep copies of every task in the store, ordered by insertion time
             (oldest first).  Returns an empty list when the store is empty.
         """
         return [copy.deepcopy(task) for task in self._tasks.values()]
 
     def update(self, task_id: str, **fields: Any) -> Task:
-        """Patch mutable fields on an existing task and refresh ``updated_at``.
+        """Patch mutable fields on an existing task.
 
-        Field names are validated against the ``Task`` dataclass **before** any
-        mutation occurs.  This prevents partial updates when an invalid field
-        name is supplied.
-
-        The ``id`` field is immutable and cannot be changed via ``update()``.
-
-        An empty *fields* payload is permitted -- it refreshes ``updated_at``
-        without changing any other field.
+        Validates every requested field name *before* applying any changes.
+        This ensures no partial updates occur when an invalid field is
+        included in the payload.  ``updated_at`` is always refreshed to the
+        current UTC time, even when *fields* is empty.
 
         Parameters
         ----------
         task_id:
             The unique identifier of the task to update.
         **fields:
-            Keyword arguments whose names must match mutable ``Task`` fields.
+            Keyword arguments whose names must correspond to mutable fields
+            on the ``Task`` dataclass.  The ``id`` field is immutable and
+            will be rejected.
 
         Returns
         -------
@@ -148,18 +146,17 @@ class InMemoryTaskStore:
         Raises
         ------
         KeyError
-            If no task with *task_id* exists.
+            If no task with *task_id* exists in the store.
         AttributeError
-            If any key in *fields* is not a valid ``Task`` field name, or if
-            the caller attempts to modify an immutable field (``id``).
+            If any key in *fields* is not a valid field on ``Task``, or if
+            an attempt is made to change the immutable ``id`` field.
         """
         if task_id not in self._tasks:
             raise KeyError(
                 f"Task with id '{task_id}' not found in the store"
             )
 
-        # Validate ALL field names before mutating anything -- fail closed on
-        # the first invalid name so no partial application occurs.
+        # Validate ALL field names before applying any mutation.
         for field_name in fields:
             if field_name not in self._TASK_FIELD_NAMES:
                 raise AttributeError(
@@ -172,19 +169,22 @@ class InMemoryTaskStore:
 
         # Apply validated updates via dataclasses.replace for safety.
         task = self._tasks[task_id]
-        updates = dict(fields)
-        updates["updated_at"] = datetime.now(timezone.utc)
-        updated_task = dataclasses.replace(task, **updates)
+
+        # Build the replacement dict: requested fields + updated_at.
+        replacement: dict[str, Any] = dict(fields)
+        replacement["updated_at"] = datetime.now(timezone.utc)
+
+        updated_task = dataclasses.replace(task, **replacement)
         self._tasks[task_id] = updated_task
         return copy.deepcopy(updated_task)
 
     def delete(self, task_id: str) -> Task:
-        """Remove and return a deep copy of the task identified by *task_id*.
+        """Remove and return a task by its identifier.
 
         Parameters
         ----------
         task_id:
-            The unique identifier of the task to delete.
+            The unique identifier of the task to remove.
 
         Returns
         -------
@@ -194,8 +194,8 @@ class InMemoryTaskStore:
         Raises
         ------
         KeyError
-            If no task with *task_id* exists.  Fails closed -- never silently
-            ignores a missing ID.
+            If no task with *task_id* exists in the store.
+            Fails closed -- never silently ignores a missing ID.
         """
         if task_id not in self._tasks:
             raise KeyError(
