@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step. Resolve any open issues using the PRD process and best practices.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as specified in TRD-TASKLIB, comprising a documentation set (README, ARCHITECTURE, API reference), a Python package scaffold under src/tasklib/ with models/ and storage/ subpackages, a Task dataclass with TaskStatus enumeration (TRD-TASKLIB \u00a73.1, FR-1 through FR-7), an InMemoryTaskStore (TRD-TASKLIB \u00a73.2, FR-8 through FR-14), a CLI entry point (TRD-TASKLIB \u00a73.3, FR-15 through FR-19), and a package root re-exporting the public API (TRD-TASKLIB \u00a73.4, FR-20). The build validates the Crafted Dev Agent pipeline's ability to close a full dependency chain \u2014 docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI \u2014 with real merges at each step (TRD-TASKLIB \u00a71).\n\nAmbiguity clarifications:\n  - Resolve any open issues using the PRD process and best practices.\n  - Resolve any open issues using the PRD process and best practices.\n  - Resolve any open issues using the PRD process and best practices.\n  - Resolve any open issues using the PRD process and best practices.\n\nOperator on 'Should task identifiers use UUID4 strings (e.g., '550e8400-e':\nResolve any open issues using the PRD process and best practices.\n\nOperator on 'Should tests use unittest (stdlib, satisfying NFR-1) or is p':\nResolve any open issues using the PRD process and best practices.\n\nOperator on 'Should the PR decomposition follow the exact 5-step dependen':\nResolve any open issues using the PRD process and best practices.\n\nOperator on 'Should a pyproject.toml or minimal packaging config be inclu':\nResolve any open issues using the PRD process and best practices.",
   "created_at": 1774812486.017662,
-  "updated_at": 1774812735.2602382,
+  "updated_at": 1774813768.3928168,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -65,16 +65,16 @@
       "pr_num": 1,
       "title": "Add tasklib documentation set \u2014 README, ARCHITECTURE, API reference",
       "branch": "",
-      "status": "available",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/50",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774813768.392571,
       "depends_on_prs": [],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "crafted-coordination/impl-journal/PR-001.md",
       "summary": "Creates the foundational documentation set under docs/tasklib/ as specified in PRD-001. README.md describes purpose, package structure, stdlib-only installation, and working usage examples for Task creation, InMemoryTaskStore usage, and CLI invocation. ARCHITECTURE.md explains the layered dependency design (docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI) with an ASCII dependency diagram. API.md documents Task dataclass fields, TaskStatus enumeration values, all InMemoryTaskStore method signatures with parameter/return types, and CLI commands with usage examples. This is the dependency-chain root \u2014 no code, no tests, docs only.",
       "impl_files": [
         "docs/tasklib/README.md",
@@ -94,7 +94,7 @@
       "pr_num": 2,
       "title": "Add tasklib Python package scaffold",
       "branch": "",
-      "status": "blocked",
+      "status": "available",
       "engineer_id": "",
       "pr_url": null,
       "claimed_at": null,
@@ -309,7 +309,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 2,
+  "version": 3,
   "schema_version": 3,
   "agent_version": "39.144.0"
 }
