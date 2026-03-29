@@ -121,11 +121,11 @@ jobs:
         run: |
           if [ -d src/ ] && find src/ -name "*.py" -maxdepth 3 | grep -q .; then
             # FP-3: only fail CI on codes that indicate real runtime errors.
-            # E999 = syntax error, F821 = undefined name, F811 = redefined name.
+            # E = all pycodestyle errors (incl. syntax), F821 = undefined name, F811 = redefined name.
             # Style violations (line length, unused imports, etc.) are annotated
             # but do NOT fail CI — LLM-generated code has stylistic variation
             # that is not a correctness issue.
-            ruff check src/ --select E999,F821,F811 --output-format=github || true
+            ruff check src/ --select E,F821,F811 --output-format=github || true
             # Informational full lint (annotations only, never fails CI)
             ruff check src/ --output-format=github 2>/dev/null || true
           else
