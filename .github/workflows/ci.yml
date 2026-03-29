@@ -82,7 +82,7 @@ jobs:
       - name: Lint (ruff — errors only)
         run: |
           if [ -d src/ ] && find src/ -name "*.py" -maxdepth 3 | grep -q .; then
-            ruff check src/ --select E999,F821,F811 --output-format=github || true
+            ruff check src/ --select E,F821,F811 --output-format=github || true
             ruff check src/ --output-format=github 2>/dev/null || true
           else
             echo "No Python files in src/ — skipping ruff"
