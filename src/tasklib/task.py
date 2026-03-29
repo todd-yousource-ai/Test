@@ -83,10 +83,9 @@ class Task:
         Uses object.__setattr__ on frozen dataclass to coerce status strings
         to TaskStatus enum members when a plain string is provided.
 
-        Validation order: type checks precede emptiness checks so that
-        non-string values are caught before any string method is called.
+        Validation order: title, id, status (with coercion), created_at.
         """
-        # Validate title: type first, then emptiness
+        # Validate title: must be a non-empty string
         if not isinstance(self.title, str):
             raise ValueError(
                 f"Task title must be a string, got {type(self.title).__name__}"
@@ -94,7 +93,7 @@ class Task:
         if not self.title.strip():
             raise ValueError("Task title must be non-empty")
 
-        # Validate id: type first, then emptiness
+        # Validate id: must be a non-empty string
         if not isinstance(self.id, str):
             raise ValueError(
                 f"Task id must be a string, got {type(self.id).__name__}"
@@ -102,27 +101,23 @@ class Task:
         if not self.id.strip():
             raise ValueError("Task id must be non-empty")
 
-        # Coerce status from string to TaskStatus if needed, fail on invalid.
-        # Check non-TaskStatus types first to reject integers, None, etc.
-        # before attempting string coercion.
-        if isinstance(self.status, TaskStatus):
-            pass
-        elif isinstance(self.status, str):
+        # Validate and coerce status: accept TaskStatus or valid string
+        if isinstance(self.status, str) and not isinstance(self.status, TaskStatus):
             try:
                 coerced = TaskStatus(self.status)
             except ValueError:
                 raise ValueError(
                     f"Invalid task status: {self.status!r}. "
-                    f"Valid values: {[s.value for s in TaskStatus]}"
+                    f"Must be one of: {[s.value for s in TaskStatus]}"
                 )
             object.__setattr__(self, "status", coerced)
-        else:
+        elif not isinstance(self.status, TaskStatus):
             raise ValueError(
                 f"Task status must be a TaskStatus enum or valid string, "
                 f"got {type(self.status).__name__}"
             )
 
-        # Validate created_at: type first, then emptiness
+        # Validate created_at: must be a non-empty string
         if not isinstance(self.created_at, str):
             raise ValueError(
                 f"Task created_at must be a string, got {type(self.created_at).__name__}"
@@ -131,12 +126,12 @@ class Task:
             raise ValueError("Task created_at must be non-empty")
 
     def to_dict(self) -> dict[str, str]:
-        """Serialize the task to a plain dictionary with string values.
+        """Serialize task to a plain dictionary with string values.
 
         Returns:
-            A dict with keys 'id', 'title', 'status', 'created_at',
-            all with string values. The status value is the plain
-            lowercase string (e.g. 'pending'), not the enum repr.
+            dict[str, str]: Dictionary with keys 'id', 'title', 'status',
+                'created_at'. The status value is the plain string value of the
+                enum member.
         """
         return {
             "id": self.id,
@@ -149,18 +144,20 @@ class Task:
     def from_dict(cls, data: dict[str, Any]) -> Task:
         """Reconstruct a Task from a dictionary.
 
-        All input is treated as untrusted. Unknown keys are rejected.
-        Missing required keys raise ValueError. Invalid values raise ValueError.
+        All input is treated as untrusted and validated strictly. Unknown keys
+        are rejected. Required keys must be present. Values are validated by
+        the dataclass __post_init__ method.
 
         Args:
-            data: A dict with keys 'id', 'title', 'status', 'created_at'.
+            data: Dictionary with keys 'id', 'title', 'status', 'created_at'.
 
         Returns:
-            A new Task instance matching the provided values.
+            Task: A new immutable Task instance.
 
         Raises:
-            ValueError: If data is not a dict, has missing/extra keys,
-                or contains invalid field values.
+            ValueError: If data is not a dict, contains unknown keys, or is
+                missing required keys.
+            ValueError: If any field value is invalid (propagated from __post_init__).
         """
         if not isinstance(data, dict):
             raise ValueError(
@@ -170,38 +167,21 @@ class Task:
         expected_keys = {"id", "title", "status", "created_at"}
         actual_keys = set(data.keys())
 
-        missing = expected_keys - actual_keys
-        if missing:
+        unknown_keys = actual_keys - expected_keys
+        if unknown_keys:
             raise ValueError(
-                f"Task.from_dict() missing required keys: {sorted(missing)}"
+                f"Task.from_dict() received unknown keys: {sorted(unknown_keys)}"
             )
 
-        extra = actual_keys - expected_keys
-        if extra:
+        missing_keys = expected_keys - actual_keys
+        if missing_keys:
             raise ValueError(
-                f"Task.from_dict() received unexpected keys: {sorted(extra)}"
-            )
-
-        # Validate all values are strings before passing to constructor
-        for key in expected_keys:
-            if not isinstance(data[key], str):
-                raise ValueError(
-                    f"Task.from_dict() field '{key}' must be a string, "
-                    f"got {type(data[key]).__name__}"
-                )
-
-        # Convert status string to TaskStatus enum -- fails closed on invalid
-        try:
-            status = TaskStatus(data["status"])
-        except ValueError:
-            raise ValueError(
-                f"Task.from_dict() invalid status: {data['status']!r}. "
-                f"Valid values: {[s.value for s in TaskStatus]}"
+                f"Task.from_dict() missing required keys: {sorted(missing_keys)}"
             )
 
         return cls(
-            id=data["id"],
             title=data["title"],
-            status=status,
+            id=data["id"],
+            status=data["status"],
             created_at=data["created_at"],
         )
