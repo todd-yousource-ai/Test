@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+from uuid import uuid4
 
 
 class TaskStatus(str, Enum):
@@ -39,8 +40,6 @@ class TaskStatus(str, Enum):
 
 def _generate_id() -> str:
     """Generate a unique task identifier using uuid4 hex."""
-    from uuid import uuid4
-
     return uuid4().hex
 
 
@@ -76,11 +75,24 @@ class Task:
     created_at: str = field(default="")
 
     def __post_init__(self) -> None:
-        """Validate fields and auto-populate generated values when absent."""
+        """Validate fields and auto-populate generated values when absent.
+
+        Because the dataclass is frozen, ``object.__setattr__`` is used to
+        set auto-generated defaults for ``id`` and ``created_at`` when the
+        caller does not supply them (i.e., they are empty strings).
+
+        Raises:
+            ValueError: If title is not a non-empty string, if id is not a
+                string, if created_at is not a string, or if status is not
+                a valid TaskStatus member.
+        """
         if not isinstance(self.title, str):
             raise ValueError(
                 f"Task title must be a string, got {type(self.title).__name__}"
             )
+
+        if not self.title.strip():
+            raise ValueError("Task title must be a non-empty string")
 
         if not isinstance(self.id, str):
             raise ValueError(f"Task id must be a string, got {type(self.id).__name__}")
@@ -91,15 +103,9 @@ class Task:
                 f"got {type(self.created_at).__name__}"
             )
 
-        if isinstance(self.status, str) and not isinstance(self.status, TaskStatus):
-            try:
-                object.__setattr__(self, "status", TaskStatus(self.status))
-            except ValueError as exc:
-                raise ValueError(f"Invalid task status: {self.status!r}") from exc
-        elif not isinstance(self.status, TaskStatus):
+        if not isinstance(self.status, TaskStatus):
             raise ValueError(
-                "Task status must be a TaskStatus or string, "
-                f"got {type(self.status).__name__}"
+                f"Task status must be a TaskStatus member, got {self.status!r}"
             )
 
         if self.id == "":
@@ -109,7 +115,12 @@ class Task:
             object.__setattr__(self, "created_at", _generate_created_at())
 
     def to_dict(self) -> dict[str, str]:
-        """Serialize the task to a plain string-only dictionary."""
+        """Serialize the task to a plain dictionary with string values.
+
+        Returns:
+            A dict with keys ``id``, ``title``, ``status``, ``created_at``,
+            all with string values suitable for JSON serialization.
+        """
         return {
             "id": self.id,
             "title": self.title,
@@ -119,62 +130,57 @@ class Task:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Task:
-        """Deserialize a task from a plain dictionary.
+        """Reconstruct a Task from a dictionary.
 
-        Security assumptions:
-        - ``data`` is untrusted external input.
-        - Only the exact required keys are accepted.
-        - All values must be strings and status must map to a valid enum member.
+        All input is treated as untrusted and validated strictly. Missing
+        or invalid fields cause a ``ValueError`` to be raised -- no silent
+        coercion or defaults are applied for required fields.
 
-        Failure behavior:
-        - Raises ValueError on non-dict input, missing keys, unexpected keys,
-          non-string values, or invalid status values.
+        Args:
+            data: A mapping containing ``id``, ``title``, ``status``, and
+                ``created_at`` keys with string values.
+
+        Returns:
+            A new Task instance populated from the provided data.
+
+        Raises:
+            ValueError: If any required key is missing, if any value has
+                an unexpected type, or if the status string is not a valid
+                TaskStatus member.
         """
         if not isinstance(data, dict):
             raise ValueError(
-                f"Task data must be a dict, got {type(data).__name__}"
+                f"Task.from_dict expects a dict, got {type(data).__name__}"
             )
 
-        expected_keys = {"id", "title", "status", "created_at"}
-        actual_keys = set(data.keys())
-
-        missing_keys = expected_keys - actual_keys
-        if missing_keys:
+        required_keys = {"id", "title", "status", "created_at"}
+        missing = required_keys - set(data.keys())
+        if missing:
             raise ValueError(
-                f"Task data missing required keys: {sorted(missing_keys)}"
+                f"Task.from_dict missing required key(s): {', '.join(sorted(missing))}"
             )
 
-        unexpected_keys = actual_keys - expected_keys
-        if unexpected_keys:
-            raise ValueError(
-                f"Task data contains unexpected keys: {sorted(unexpected_keys)}"
-            )
-
-        id_value = data["id"]
-        title_value = data["title"]
-        status_value = data["status"]
-        created_at_value = data["created_at"]
-
-        for field_name, field_value in (
-            ("id", id_value),
-            ("title", title_value),
-            ("status", status_value),
-            ("created_at", created_at_value),
-        ):
-            if not isinstance(field_value, str):
+        for key in required_keys:
+            if not isinstance(data[key], str):
                 raise ValueError(
-                    f"Task field {field_name!r} must be a string, "
-                    f"got {type(field_value).__name__}"
+                    f"Task.from_dict expected string for '{key}', "
+                    f"got {type(data[key]).__name__}"
                 )
 
         try:
-            status = TaskStatus(status_value)
-        except ValueError as exc:
-            raise ValueError(f"Invalid task status: {status_value!r}") from exc
+            status = TaskStatus(data["status"])
+        except ValueError:
+            raise ValueError(
+                f"Invalid task status: {data['status']!r}. "
+                f"Valid values: {[s.value for s in TaskStatus]}"
+            )
 
         return cls(
-            id=id_value,
-            title=title_value,
+            id=data["id"],
+            title=data["title"],
             status=status,
-            created_at=created_at_value,
+            created_at=data["created_at"],
         )
+
+
+__all__ = ["Task", "TaskStatus"]
