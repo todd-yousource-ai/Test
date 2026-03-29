@@ -4,7 +4,7 @@
   "intent": "Build a simple Python task management library (tasklib). It is not a production system. Its purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 from documentation through scaffold to working code \u2014 with real merges at each step.",
   "scope_statement": "Build a minimal Python task management library (tasklib) as defined in TRD-TASKLIB, consisting of five sequential dependency layers: documentation (README, ARCHITECTURE, API), package scaffold (src/tasklib/ with models/ and storage/ subpackages), task model (Task dataclass with TaskStatus enum per FR-1 through FR-7), in-memory task store (InMemoryTaskStore per FR-8 through FR-14), and CLI entry point (add/list/complete commands per FR-15 through FR-19), with a package root re-exporting the public API (FR-20). The purpose is to validate that the Crafted Dev Agent build pipeline can close a complete dependency chain \u2014 docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI \u2014 with real merges at each step, per TRD-TASKLIB \u00a71.\n\nOperator on 'TRD-TASKLIB \u00a76 states no more than 3 implementation files pe':\nuse the PRD process to resolve any gaps. Use best practices.\n\nOperator on 'FR-1 specifies 'a unique identifier generated automatically ':\nuse the PRD process to resolve any gaps. Use best practices.\n\nOperator on 'The CLI (FR-15) must be 'runnable as a Python module' \u2014 shou':\nuse the PRD process to resolve any gaps. Use best practices.\n\nOperator on 'Should the test suite be delivered as a separate PR in the d':\nuse the PRD process to resolve any gaps. Use best practices.",
   "created_at": 1774808642.1068301,
-  "updated_at": 1774808953.7814882,
+  "updated_at": 1774810441.3304808,
   "updated_by": "todd-gould",
   "prd_plan": [
     {
@@ -72,16 +72,16 @@
       "pr_num": 1,
       "title": "Add documentation foundation \u2014 README, ARCHITECTURE, API",
       "branch": "",
-      "status": "available",
+      "status": "done",
       "engineer_id": "",
-      "pr_url": null,
+      "pr_url": "https://github.com/todd-yousource-ai/Test/pull/45",
       "claimed_at": null,
       "started_at": null,
-      "completed_at": null,
+      "completed_at": 1774810441.330284,
       "depends_on_prs": [],
       "retry_count": 0,
       "failure_summary": "",
-      "journal_path": "",
+      "journal_path": "crafted-coordination/impl-journal/PR-001.md",
       "summary": "Creates the three seed documentation files that anchor the tasklib dependency chain per PRD-001. README.md describes the library purpose, package structure, and usage example. ARCHITECTURE.md describes the five-layer dependency chain (docs \u2192 scaffold \u2192 model \u2192 storage \u2192 CLI) with an ASCII diagram. API.md documents all planned public interfaces (Task fields, TaskStatus values, InMemoryTaskStore methods, CLI commands) with signatures, return types, and usage examples. No executable code is included. README.md and ARCHITECTURE.md become immutable after merge; API.md may be amended by a future update PR when interfaces are implemented.",
       "impl_files": [
         "README.md",
@@ -101,7 +101,7 @@
       "pr_num": 2,
       "title": "Add tasklib package scaffold",
       "branch": "",
-      "status": "blocked",
+      "status": "available",
       "engineer_id": "",
       "pr_url": null,
       "claimed_at": null,
@@ -318,7 +318,7 @@
     }
   },
   "knowledge_notes": [],
-  "version": 2,
+  "version": 3,
   "schema_version": 3,
   "agent_version": "39.143.0"
 }
