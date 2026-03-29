@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any, Dict
 from uuid import uuid4
 
 
@@ -38,10 +39,28 @@ class TaskStatus(str, Enum):
 
 
 def _generate_id() -> str:
+    """Generate a UUID4 hex identifier.
+
+    Security assumptions:
+    - Identifier generation uses stdlib UUID4 randomness.
+
+    Failure behavior:
+    - Any unexpected stdlib failure propagates; no fallback identifiers are used.
+    """
+
     return uuid4().hex
 
 
 def _generate_created_at() -> str:
+    """Generate a UTC ISO-8601 timestamp string.
+
+    Security assumptions:
+    - Timestamps are generated in UTC to avoid local timezone ambiguity.
+
+    Failure behavior:
+    - Any unexpected datetime failure propagates; no fallback timestamps are used.
+    """
+
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -61,40 +80,50 @@ class Task:
     """
 
     title: str
-    id: str = field(default_factory=_generate_id)
+    id: str = field(default="")
     status: TaskStatus = TaskStatus.PENDING
-    created_at: str = field(default_factory=_generate_created_at)
+    created_at: str = field(default="")
 
     def __post_init__(self) -> None:
-        # --- title: must be a non-empty string ---
+        """Validate fields and populate generated values.
+
+        Security assumptions:
+        - All constructor input is treated as untrusted and validated explicitly.
+
+        Failure behavior:
+        - Invalid field types or values raise ``ValueError`` immediately.
+        - Missing ``id`` or ``created_at`` are populated atomically via
+          ``object.__setattr__`` for frozen dataclass compatibility.
+        """
+
         if not isinstance(self.title, str):
             raise ValueError("title must be a string")
         if not self.title.strip():
             raise ValueError("title must be a non-empty string")
 
-        # --- status: coerce valid strings; reject everything else ---
         if isinstance(self.status, str) and not isinstance(self.status, TaskStatus):
             object.__setattr__(self, "status", TaskStatus(self.status))
         elif not isinstance(self.status, TaskStatus):
             raise ValueError("status must be a TaskStatus or valid status string")
 
-        # --- id: validate type eagerly ---
         if not isinstance(self.id, str):
             raise ValueError("id must be a string")
         if not self.id:
             object.__setattr__(self, "id", _generate_id())
 
-        # --- created_at: validate type eagerly ---
         if not isinstance(self.created_at, str):
             raise ValueError("created_at must be a string")
         if not self.created_at:
             object.__setattr__(self, "created_at", _generate_created_at())
 
-    def to_dict(self) -> dict[str, str]:
-        """Serialize the task to plain string fields.
+    def to_dict(self) -> Dict[str, str]:
+        """Serialize the task to a plain string dictionary.
+
+        Security assumptions:
+        - Output contains only plain strings to support safe JSON/dict round trips.
 
         Failure behavior:
-        - Returns a complete dictionary representation with no omitted fields.
+        - Returns a complete dictionary representation without mutating the object.
         """
 
         return {
@@ -105,15 +134,17 @@ class Task:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, str]) -> Task:
-        """Deserialize a task from a plain dictionary.
+    def from_dict(cls, data: Dict[str, str]) -> Task:
+        """Deserialize a task from a plain string dictionary.
 
         Security assumptions:
-        - ``data`` is untrusted external input and is validated strictly.
+        - ``data`` is untrusted input and is validated strictly.
+        - Only the required keys are accepted for reconstruction.
 
         Failure behavior:
-        - Missing required keys, non-dict inputs, non-string values, or invalid
-          status values raise ``ValueError``.
+        - Non-dict input raises ``ValueError``.
+        - Missing required keys, non-string values, or invalid status values
+          raise ``ValueError``.
         """
 
         if not isinstance(data, dict):
@@ -124,25 +155,18 @@ class Task:
         if missing_keys:
             raise ValueError(f"missing required keys: {', '.join(missing_keys)}")
 
-        values: dict[str, str] = {}
+        validated: Dict[str, str] = {}
         for key in required_keys:
-            value = data[key]
+            value: Any = data[key]
             if not isinstance(value, str):
                 raise ValueError(f"{key} must be a string")
-            values[key] = value
-
-        try:
-            status = TaskStatus(values["status"])
-        except ValueError:
-            raise ValueError(
-                f"invalid status: {values['status']!r}"
-            ) from None
+            validated[key] = value
 
         return cls(
-            id=values["id"],
-            title=values["title"],
-            status=status,
-            created_at=values["created_at"],
+            id=validated["id"],
+            title=validated["title"],
+            status=TaskStatus(validated["status"]),
+            created_at=validated["created_at"],
         )
 
 
