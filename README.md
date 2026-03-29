@@ -9,16 +9,14 @@ tasklib validates the Crafted Dev Agent pipeline end-to-end by exercising a full
 ## Key Subsystems
 
 - **Documentation Set** — README, ARCHITECTURE overview, and API reference that trigger the initial merge gate
-- **Package Scaffold** — Python package with subpackage directories mirrored to the local test workspace
-- **Model** — Task data model defining the core domain objects
-- **Storage** — Persistence layer for task data
-- **CLI** — Command-line interface for interacting with tasks
-- **Merge Gate** — Validates that documentation PRs fire downstream recognition and dependency resolution
-- **Crafted Dev Agent Pipeline** — Orchestrates the full dependency chain from docs through working code
+- **Package Scaffold** — Python package with subpackage directories, mirrored to the local test workspace
+- **Model** — Core task data model that downstream code PRs depend on
+- **Storage** — Persistence layer that imports from the model, validating cross-PR import resolution
+- **CLI** — Command-line interface that closes the dependency chain by consuming storage and model
 
 ## Architecture Overview
 
-tasklib follows a linear dependency chain: documentation merges trigger scaffold generation, which establishes the package structure for model, storage, and CLI layers. Each stage depends on the successful merge of the previous stage, with import resolution verified locally before CI runs. The Crafted Dev Agent pipeline orchestrates this sequence, using merge gates to enforce ordering.
+tasklib follows a linear dependency chain where each layer depends only on the layers before it: documentation is merged first, then the scaffold, then model, storage, and CLI in sequence. Each step validates a specific capability of the Crafted Dev Agent pipeline — merge gate detection, file mirroring, and local import resolution. The architecture is intentionally minimal to isolate pipeline validation from application complexity.
 
 ## Repository Structure
 
@@ -34,17 +32,17 @@ tests/                 — test suite
 ## Getting Started
 
 - Read `CLAUDE.md` before writing any code — it contains LLM coding instructions and conventions
-- Review `TRD-TASKLIB` in `crafted-docs/` to understand the validation goals and dependency chain
-- The full build sequence is: docs → scaffold → model → storage → CLI — each stage must merge before the next begins
-- Run tests locally to confirm import resolution before pushing to CI
-- Check `crafted-standards/` for architecture decisions and interface contracts
+- Review `crafted-docs/TRD-TASKLIB.md` to understand the validation goals and dependency chain
+- Review `crafted-docs/forge_architecture_context.md` for pipeline architecture context
+- The full dependency chain is: docs → scaffold → model → storage → CLI — PRs should follow this order
+- Run the test suite in `tests/` to verify import resolution and merge gate behavior
 
 ## Documentation
 
 | Document | Location | What It Contains |
 |----------|----------|------------------|
-| TRD-TASKLIB | `crafted-docs/TRD-TASKLIB.md` / `crafted-docs/TRD-TASKLIB.docx` | Core TRD defining the task management library scope, validation goals, and dependency chain |
-| Architecture Context | `crafted-docs/forge_architecture_context.md` | Crafted Dev Agent architecture context and system overview |
+| TRD-TASKLIB | `crafted-docs/TRD-TASKLIB.md` / `crafted-docs/TRD-TASKLIB.docx` | Core TRD defining the task management library, validation goals, and dependency chain |
+| Architecture Context | `crafted-docs/forge_architecture_context.md` | Pipeline architecture context for the Crafted Dev Agent build system |
 
 ## Where to Go Next
 
