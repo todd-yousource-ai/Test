@@ -59,9 +59,7 @@ class Task:
     A task may be constructed with only a title. The id and created_at fields
     are auto-generated when omitted, and status defaults to TaskStatus.PENDING.
 
-    The status field accepts both TaskStatus enum instances and raw status
-    strings (e.g. ``"pending"``), which are converted to the corresponding
-    enum member during validation.
+    The status field must be a TaskStatus enum instance.
 
     Security assumptions:
     - Serialized input is untrusted and validated strictly.
@@ -80,40 +78,50 @@ class Task:
     created_at: str = field(default_factory=_generate_created_at)
 
     def __post_init__(self) -> None:
-        """Validate fields and populate generated defaults when absent.
+        """Validate fields after construction.
 
-        Raw status strings are accepted and converted to TaskStatus members.
-        Auto-generated id and created_at values are verified non-empty after
-        generation.
+        All validation failures raise ValueError with context.
         """
+        # Validate title
         if not isinstance(self.title, str):
-            raise ValueError("Task title must be a string")
+            raise ValueError(
+                f"Task title must be a string, got {type(self.title).__name__}"
+            )
         if not self.title.strip():
             raise ValueError("Task title must be non-empty")
 
+        # Validate id
         if not isinstance(self.id, str):
-            raise ValueError("Task id must be a string")
-        if not isinstance(self.created_at, str):
-            raise ValueError("Task created_at must be a string")
-
-        # Accept raw status strings so callers need not import TaskStatus.
-        if not isinstance(self.status, TaskStatus):
-            if isinstance(self.status, str):
-                try:
-                    object.__setattr__(self, "status", TaskStatus(self.status))
-                except ValueError as exc:
-                    raise ValueError(f"Invalid task status: {self.status!r}") from exc
-            else:
-                raise ValueError("Task status must be a TaskStatus or valid status string")
-
-        # Final guard: ensure both fields are populated.
-        if not self.id:
+            raise ValueError(
+                f"Task id must be a string, got {type(self.id).__name__}"
+            )
+        if not self.id.strip():
             raise ValueError("Task id must be non-empty")
-        if not self.created_at:
+
+        # Validate status -- must be a TaskStatus enum member, no coercion
+        if not isinstance(self.status, TaskStatus):
+            raise ValueError(
+                f"Task status must be a TaskStatus enum member, "
+                f"got {type(self.status).__name__}: {self.status!r}. "
+                f"Must be one of: {[s for s in TaskStatus]}"
+            )
+
+        # Validate created_at
+        if not isinstance(self.created_at, str):
+            raise ValueError(
+                f"Task created_at must be a string, got {type(self.created_at).__name__}"
+            )
+        if not self.created_at.strip():
             raise ValueError("Task created_at must be non-empty")
 
     def to_dict(self) -> dict[str, str]:
-        """Serialize the task to a plain dictionary of strings."""
+        """Serialize the task to a plain dictionary with string values.
+
+        Returns:
+            A dict with keys 'id', 'title', 'status', 'created_at',
+            all mapped to string values. The status field is serialized
+            as its lowercase string value (e.g. 'pending').
+        """
         return {
             "id": self.id,
             "title": self.title,
@@ -122,40 +130,60 @@ class Task:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, str]) -> Task:
-        """Deserialize a task from a plain dictionary of strings.
+    def from_dict(cls, data: dict[str, Any]) -> Task:
+        """Deserialize a Task from a plain dictionary.
 
-        The input is treated as untrusted. Required keys must be present, all
-        values must be strings, and unknown/extra keys are rejected to prevent
-        unexpected data from passing silently.
+        All input is treated as untrusted and validated strictly.
+        Only the expected keys ('id', 'title', 'status', 'created_at') are
+        accepted. Extra or missing keys raise ValueError.
+
+        Args:
+            data: A dictionary with string keys and values representing
+                  a serialized Task.
+
+        Returns:
+            A new Task instance reconstructed from the dictionary.
+
+        Raises:
+            ValueError: If data is not a dict, has missing/extra keys,
+                        or contains invalid values.
         """
         if not isinstance(data, dict):
-            raise ValueError("Task data must be a dictionary")
+            raise ValueError(
+                f"Task.from_dict() requires a dict, got {type(data).__name__}"
+            )
 
         expected_keys = {"id", "title", "status", "created_at"}
         actual_keys = set(data.keys())
 
-        unknown_keys = actual_keys - expected_keys
-        if unknown_keys:
+        missing = expected_keys - actual_keys
+        if missing:
             raise ValueError(
-                f"Task data contains unknown keys: {sorted(unknown_keys)}"
+                f"Task.from_dict() missing required keys: {sorted(missing)}"
             )
 
-        missing_keys = expected_keys - actual_keys
-        if missing_keys:
+        extra = actual_keys - expected_keys
+        if extra:
             raise ValueError(
-                f"Task data missing required keys: {sorted(missing_keys)}"
+                f"Task.from_dict() received unexpected keys: {sorted(extra)}"
             )
 
+        # Validate all values are strings before proceeding
         for key in expected_keys:
-            value: Any = data[key]
-            if not isinstance(value, str):
-                raise ValueError(f"Task field {key!r} must be a string")
+            if not isinstance(data[key], str):
+                raise ValueError(
+                    f"Task.from_dict() value for '{key}' must be a string, "
+                    f"got {type(data[key]).__name__}"
+                )
 
+        # Convert status string to TaskStatus enum -- fails closed on invalid value
         try:
             status = TaskStatus(data["status"])
-        except ValueError as exc:
-            raise ValueError(f"Invalid task status: {data['status']!r}") from exc
+        except ValueError:
+            raise ValueError(
+                f"Task.from_dict() invalid status: {data['status']!r}. "
+                f"Must be one of: {[s.value for s in TaskStatus]}"
+            )
 
         return cls(
             id=data["id"],
@@ -163,3 +191,18 @@ class Task:
             status=status,
             created_at=data["created_at"],
         )
+
+    def __eq__(self, other: object) -> bool:
+        """Check equality based on all fields."""
+        if not isinstance(other, Task):
+            return NotImplemented
+        return (
+            self.id == other.id
+            and self.title == other.title
+            and self.status == other.status
+            and self.created_at == other.created_at
+        )
+
+    def __hash__(self) -> int:
+        """Hash based on all fields for use in sets and dicts."""
+        return hash((self.id, self.title, self.status, self.created_at))
