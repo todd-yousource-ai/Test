@@ -89,14 +89,12 @@ class Task:
 
         Security assumptions:
         - All constructor input is treated as untrusted and validated explicitly.
-        - Type validation occurs *before* any mutation (default generation),
-          ensuring non-string falsy values (e.g., ``0``) are rejected rather
-          than silently overwritten.
+        - Type validation occurs before default generation to prevent silent
+          coercion or overwrite of invalid values.
 
         Failure behavior:
         - Invalid field types or values raise ``ValueError`` immediately.
-        - Missing ``id`` or ``created_at`` are populated atomically via
-          ``object.__setattr__`` for frozen dataclass compatibility.
+        - UUID and timestamp generation errors propagate without fallback.
         """
 
         if not isinstance(self.title, str):
@@ -104,37 +102,39 @@ class Task:
         if not self.title.strip():
             raise ValueError("title must be non-empty")
 
+        # Type checks must precede emptiness checks so that non-string falsy
+        # values (e.g. 0, None) are rejected rather than silently replaced with
+        # a generated default.
         if not isinstance(self.id, str):
             raise ValueError("id must be a string")
         if not isinstance(self.created_at, str):
             raise ValueError("created_at must be a string")
 
         try:
-            normalized_status = (
-                self.status
-                if isinstance(self.status, TaskStatus)
-                else TaskStatus(self.status)
-            )
-        except ValueError as exc:
-            raise ValueError(f"invalid status: {self.status!r}") from exc
+            status = self.status if isinstance(self.status, TaskStatus) else TaskStatus(self.status)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("status must be a valid TaskStatus") from exc
 
-        object.__setattr__(self, "status", normalized_status)
+        object.__setattr__(self, "status", status)
 
-        if not self.id:
+        if self.id == "":
             object.__setattr__(self, "id", _generate_id())
+        elif not self.id.strip():
+            raise ValueError("id must be non-empty when provided")
 
-        if not self.created_at:
+        if self.created_at == "":
             object.__setattr__(self, "created_at", _generate_created_at())
+        elif not self.created_at.strip():
+            raise ValueError("created_at must be non-empty when provided")
 
     def to_dict(self) -> dict[str, str]:
         """Serialize the task to a plain string dictionary.
 
         Security assumptions:
-        - Output is intended for trusted or untrusted transport as plain data.
+        - Serialization emits only primitive string values for safe downstream use.
 
         Failure behavior:
-        - This method does not mask invalid internal state; unexpected failures
-          propagate rather than returning partial or lossy output.
+        - This method performs no silent coercion beyond enum-to-string conversion.
         """
 
         return {
@@ -146,41 +146,37 @@ class Task:
 
     @classmethod
     def from_dict(cls, data: dict[str, str]) -> Task:
-        """Deserialize a task from a plain string dictionary.
+        """Deserialize a task from a dictionary produced by ``to_dict``.
 
         Security assumptions:
-        - ``data`` is treated as untrusted input and validated strictly.
-        - Only the recognized serialized keys are accepted; unknown keys are
-          silently ignored to support forward compatibility (e.g., newer
-          serialization formats adding optional fields).
-        - All recognized values are explicitly validated as strings before use.
+        - ``data`` is untrusted and validated for required keys and string values.
+        - Status is reconstructed through ``TaskStatus`` to reject invalid states.
 
         Failure behavior:
-        - Non-dict input or missing required keys raise ``ValueError``.
-        - Non-string values for required keys raise ``ValueError``.
-        - Invalid status strings raise ``ValueError`` via enum coercion.
+        - Missing keys, non-dict input, non-string values, or invalid status values
+          raise ``ValueError``.
         """
 
         if not isinstance(data, dict):
-            raise ValueError("data must be a dict[str, str]")
+            raise ValueError("data must be a dictionary")
 
-        required_keys = {"id", "title", "status", "created_at"}
-        missing = required_keys - set(data.keys())
-        if missing:
-            raise ValueError(
-                f"data is missing required keys: {', '.join(sorted(missing))}"
-            )
+        required_keys = ("id", "title", "status", "created_at")
+        for key in required_keys:
+            if key not in data:
+                raise ValueError(f"missing required key: {key}")
 
+        validated: dict[str, str] = {}
         for key in required_keys:
             value: Any = data[key]
             if not isinstance(value, str):
                 raise ValueError(f"{key} must be a string")
+            validated[key] = value
 
         return cls(
-            id=data["id"],
-            title=data["title"],
-            status=TaskStatus(data["status"]),
-            created_at=data["created_at"],
+            id=validated["id"],
+            title=validated["title"],
+            status=TaskStatus(validated["status"]),
+            created_at=validated["created_at"],
         )
 
 
