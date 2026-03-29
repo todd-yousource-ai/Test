@@ -14,6 +14,8 @@ Security / failure assumptions
 * ``update()`` validates every field name against the Task dataclass and raises
   ``AttributeError`` immediately on the first invalid name -- no partial
   application occurs before the error.
+* ``update()`` rejects attempts to change the ``id`` field -- the identity key
+  is immutable once a task is stored.
 * No external dependencies -- only Python stdlib (``copy``, ``datetime``,
   ``dataclasses``).
 """
@@ -48,6 +50,10 @@ class InMemoryTaskStore:
     _TASK_FIELD_NAMES: frozenset[str] = frozenset(
         f.name for f in dataclasses.fields(Task)
     )
+
+    # -- Immutable identity fields that update() must reject -----------------
+
+    _IMMUTABLE_FIELDS: frozenset[str] = frozenset({"id"})
 
     # -- Public CRUD ---------------------------------------------------------
 
@@ -95,12 +101,12 @@ class InMemoryTaskStore:
         Raises
         ------
         KeyError
-            If no task with *task_id* exists.  Fails closed -- never returns
-            ``None`` silently.
+            If no task with the given ``task_id`` exists.  Fails closed --
+            never returns ``None`` silently.
         """
         if task_id not in self._tasks:
             raise KeyError(
-                f"Task with id '{task_id}' not found in the store"
+                f"No task with id '{task_id}' exists in the store"
             )
         return copy.deepcopy(self._tasks[task_id])
 
@@ -110,27 +116,31 @@ class InMemoryTaskStore:
         Returns
         -------
         list[Task]
-            Deep copies of every task in the store.  Returns an empty list
-            when the store contains no tasks.
+            Deep copies of every task in the store, ordered by insertion time
+            (oldest first).  Returns an empty list when the store is empty.
         """
         return [copy.deepcopy(task) for task in self._tasks.values()]
 
-    def update(self, task_id: str, fields: dict[str, Any] | None = None, **kwargs: Any) -> Task:
+    def update(self, task_id: str, **fields: Any) -> Task:
         """Patch mutable fields on an existing task.
 
-        Accepts fields either as a dictionary first argument or as keyword
-        arguments (supporting both calling conventions used in the test suite).
-        Automatically sets ``updated_at`` to the current UTC time regardless
-        of whether any other fields are provided.
+        Validates that every key in *fields* corresponds to an actual field on
+        the ``Task`` dataclass **before** applying any mutations.  This
+        prevents partial updates when an invalid field name is supplied.
+
+        Immutable identity fields (e.g. ``id``) cannot be changed via
+        ``update()``.  Attempting to do so raises ``AttributeError``.
+
+        The ``updated_at`` timestamp is always refreshed to the current UTC
+        time, even when *fields* is empty.
 
         Parameters
         ----------
         task_id:
             The unique identifier of the task to update.
-        fields:
-            Optional dictionary of field names to new values.
-        **kwargs:
-            Additional field names to new values (merged with *fields*).
+        **fields:
+            Keyword arguments whose keys are ``Task`` field names and whose
+            values are the new values to set.
 
         Returns
         -------
@@ -140,43 +150,42 @@ class InMemoryTaskStore:
         Raises
         ------
         KeyError
-            If no task with *task_id* exists.  Fails closed.
+            If no task with the given ``task_id`` exists.
         AttributeError
-            If any key in *fields* / *kwargs* is not a valid field on ``Task``.
-            Validation runs before any mutation -- no partial updates on error.
+            If any key in *fields* is not a valid ``Task`` field name, or if
+            an immutable identity field (such as ``id``) is included.  Raised
+            before any mutation occurs -- no partial application.
         """
         if task_id not in self._tasks:
             raise KeyError(
-                f"Task with id '{task_id}' not found in the store"
+                f"No task with id '{task_id}' exists in the store"
             )
 
-        # Merge both sources of field updates.
-        merged: dict[str, Any] = {}
-        if fields is not None:
-            merged.update(fields)
-        merged.update(kwargs)
-
-        # Validate all field names BEFORE applying any changes.  This prevents
-        # partial updates when an invalid name is present.
-        for field_name in merged:
+        # Validate all field names before applying any changes.
+        for field_name in fields:
             if field_name not in self._TASK_FIELD_NAMES:
                 raise AttributeError(
                     f"Task has no field '{field_name}'"
                 )
+            if field_name in self._IMMUTABLE_FIELDS:
+                raise AttributeError(
+                    f"Field '{field_name}' is immutable and cannot be updated"
+                )
 
         task = self._tasks[task_id]
 
-        # Apply requested field changes via dataclasses.replace for safety.
-        # Always set updated_at to current UTC time.
-        replace_kwargs: dict[str, Any] = dict(merged)
-        replace_kwargs["updated_at"] = datetime.now(timezone.utc)
+        # Build the replacement kwargs: start with current values, overlay
+        # caller-supplied fields, then force updated_at.
+        current = {f.name: getattr(task, f.name) for f in dataclasses.fields(task)}
+        current.update(fields)
+        current["updated_at"] = datetime.now(timezone.utc)
 
-        updated_task = dataclasses.replace(task, **replace_kwargs)
+        updated_task = Task(**current)
         self._tasks[task_id] = updated_task
         return copy.deepcopy(updated_task)
 
     def delete(self, task_id: str) -> Task:
-        """Remove and return a task by its identifier.
+        """Remove a task from the store and return it.
 
         Parameters
         ----------
@@ -191,12 +200,12 @@ class InMemoryTaskStore:
         Raises
         ------
         KeyError
-            If no task with *task_id* exists.  Fails closed -- never silently
-            ignores a missing ID.
+            If no task with the given ``task_id`` exists.  Fails closed --
+            never returns ``None`` silently.
         """
         if task_id not in self._tasks:
             raise KeyError(
-                f"Task with id '{task_id}' not found in the store"
+                f"No task with id '{task_id}' exists in the store"
             )
         removed = self._tasks.pop(task_id)
         return copy.deepcopy(removed)
