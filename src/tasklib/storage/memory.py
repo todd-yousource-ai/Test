@@ -90,43 +90,47 @@ class InMemoryTaskStore:
         Returns
         -------
         Task
-            A deep copy of the matching task.
+            A deep copy of the stored task.
 
         Raises
         ------
         KeyError
-            If no task with *task_id* exists in the store.
+            If no task with *task_id* exists.  Fails closed -- never returns
+            ``None`` silently.
         """
         if task_id not in self._tasks:
-            raise KeyError(f"No task found with id '{task_id}'")
+            raise KeyError(
+                f"Task with id '{task_id}' not found in the store"
+            )
         return copy.deepcopy(self._tasks[task_id])
 
     def list_all(self) -> list[Task]:
-        """Return all stored tasks in insertion order.
+        """Return a list of all stored tasks in insertion order.
 
         Returns
         -------
         list[Task]
-            A list of deep copies of every stored task.  Returns an empty
-            list when the store contains no tasks.
+            Deep copies of every task in the store.  Returns an empty list
+            when the store contains no tasks.
         """
-        return [copy.deepcopy(t) for t in self._tasks.values()]
+        return [copy.deepcopy(task) for task in self._tasks.values()]
 
-    def update(self, task_id: str, **fields: Any) -> Task:
+    def update(self, task_id: str, fields: dict[str, Any] | None = None, **kwargs: Any) -> Task:
         """Patch mutable fields on an existing task.
 
-        Validates **all** supplied field names before applying any changes so
-        that an invalid name never causes a partial update.  ``updated_at`` is
-        always set to ``datetime.now(timezone.utc)`` -- even when *fields* is
-        empty.
+        Accepts fields either as a dictionary first argument or as keyword
+        arguments (supporting both calling conventions used in the test suite).
+        Automatically sets ``updated_at`` to the current UTC time regardless
+        of whether any other fields are provided.
 
         Parameters
         ----------
         task_id:
-            The identifier of the task to update.
-        **fields:
-            Keyword arguments whose names must correspond to fields defined on
-            the ``Task`` dataclass.
+            The unique identifier of the task to update.
+        fields:
+            Optional dictionary of field names to new values.
+        **kwargs:
+            Additional field names to new values (merged with *fields*).
 
         Returns
         -------
@@ -136,16 +140,25 @@ class InMemoryTaskStore:
         Raises
         ------
         KeyError
-            If no task with *task_id* exists in the store.
+            If no task with *task_id* exists.  Fails closed.
         AttributeError
-            If any key in *fields* is not a valid field name on ``Task``.
+            If any key in *fields* / *kwargs* is not a valid field on ``Task``.
+            Validation runs before any mutation -- no partial updates on error.
         """
         if task_id not in self._tasks:
-            raise KeyError(f"No task found with id '{task_id}'")
+            raise KeyError(
+                f"Task with id '{task_id}' not found in the store"
+            )
 
-        # Validate all field names *before* applying any mutations so we
-        # never leave the store in a partially-updated state.
-        for field_name in fields:
+        # Merge both sources of field updates.
+        merged: dict[str, Any] = {}
+        if fields is not None:
+            merged.update(fields)
+        merged.update(kwargs)
+
+        # Validate all field names BEFORE applying any changes.  This prevents
+        # partial updates when an invalid name is present.
+        for field_name in merged:
             if field_name not in self._TASK_FIELD_NAMES:
                 raise AttributeError(
                     f"Task has no field '{field_name}'"
@@ -153,22 +166,22 @@ class InMemoryTaskStore:
 
         task = self._tasks[task_id]
 
-        # Apply caller-supplied field updates.
-        for field_name, value in fields.items():
-            object.__setattr__(task, field_name, value)
+        # Apply requested field changes via dataclasses.replace for safety.
+        # Always set updated_at to current UTC time.
+        replace_kwargs: dict[str, Any] = dict(merged)
+        replace_kwargs["updated_at"] = datetime.now(timezone.utc)
 
-        # Always refresh updated_at -- even when fields is empty.
-        object.__setattr__(task, "updated_at", datetime.now(timezone.utc))
-
-        return copy.deepcopy(task)
+        updated_task = dataclasses.replace(task, **replace_kwargs)
+        self._tasks[task_id] = updated_task
+        return copy.deepcopy(updated_task)
 
     def delete(self, task_id: str) -> Task:
-        """Remove a task from the store and return it.
+        """Remove and return a task by its identifier.
 
         Parameters
         ----------
         task_id:
-            The identifier of the task to remove.
+            The unique identifier of the task to delete.
 
         Returns
         -------
@@ -178,10 +191,12 @@ class InMemoryTaskStore:
         Raises
         ------
         KeyError
-            If no task with *task_id* exists in the store.
+            If no task with *task_id* exists.  Fails closed -- never silently
+            ignores a missing ID.
         """
         if task_id not in self._tasks:
-            raise KeyError(f"No task found with id '{task_id}'")
-
+            raise KeyError(
+                f"Task with id '{task_id}' not found in the store"
+            )
         removed = self._tasks.pop(task_id)
         return copy.deepcopy(removed)
