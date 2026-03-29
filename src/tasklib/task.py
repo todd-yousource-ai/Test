@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 from uuid import uuid4
 
 
@@ -89,6 +89,9 @@ class Task:
 
         Security assumptions:
         - All constructor input is treated as untrusted and validated explicitly.
+        - Type validation occurs *before* any mutation (default generation),
+          ensuring non-string falsy values (e.g., ``0``) are rejected rather
+          than silently overwritten.
 
         Failure behavior:
         - Invalid field types or values raise ``ValueError`` immediately.
@@ -99,31 +102,39 @@ class Task:
         if not isinstance(self.title, str):
             raise ValueError("title must be a string")
         if not self.title.strip():
-            raise ValueError("title must be a non-empty string")
-
-        if isinstance(self.status, str) and not isinstance(self.status, TaskStatus):
-            object.__setattr__(self, "status", TaskStatus(self.status))
-        elif not isinstance(self.status, TaskStatus):
-            raise ValueError("status must be a TaskStatus or valid status string")
+            raise ValueError("title must be non-empty")
 
         if not isinstance(self.id, str):
             raise ValueError("id must be a string")
+        if not isinstance(self.created_at, str):
+            raise ValueError("created_at must be a string")
+
+        try:
+            normalized_status = (
+                self.status
+                if isinstance(self.status, TaskStatus)
+                else TaskStatus(self.status)
+            )
+        except ValueError as exc:
+            raise ValueError(f"invalid status: {self.status!r}") from exc
+
+        object.__setattr__(self, "status", normalized_status)
+
         if not self.id:
             object.__setattr__(self, "id", _generate_id())
 
-        if not isinstance(self.created_at, str):
-            raise ValueError("created_at must be a string")
         if not self.created_at:
             object.__setattr__(self, "created_at", _generate_created_at())
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Serialize the task to a plain string dictionary.
 
         Security assumptions:
-        - Output contains only plain strings to support safe JSON/dict round trips.
+        - Output is intended for trusted or untrusted transport as plain data.
 
         Failure behavior:
-        - Returns a complete dictionary representation without mutating the object.
+        - This method does not mask invalid internal state; unexpected failures
+          propagate rather than returning partial or lossy output.
         """
 
         return {
@@ -134,39 +145,42 @@ class Task:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, str]) -> Task:
+    def from_dict(cls, data: dict[str, str]) -> Task:
         """Deserialize a task from a plain string dictionary.
 
         Security assumptions:
-        - ``data`` is untrusted input and is validated strictly.
-        - Only the required keys are accepted for reconstruction.
+        - ``data`` is treated as untrusted input and validated strictly.
+        - Only the recognized serialized keys are accepted; unknown keys are
+          silently ignored to support forward compatibility (e.g., newer
+          serialization formats adding optional fields).
+        - All recognized values are explicitly validated as strings before use.
 
         Failure behavior:
-        - Non-dict input raises ``ValueError``.
-        - Missing required keys, non-string values, or invalid status values
-          raise ``ValueError``.
+        - Non-dict input or missing required keys raise ``ValueError``.
+        - Non-string values for required keys raise ``ValueError``.
+        - Invalid status strings raise ``ValueError`` via enum coercion.
         """
 
         if not isinstance(data, dict):
-            raise ValueError("data must be a dictionary")
+            raise ValueError("data must be a dict[str, str]")
 
-        required_keys = ("id", "title", "status", "created_at")
-        missing_keys = [key for key in required_keys if key not in data]
-        if missing_keys:
-            raise ValueError(f"missing required keys: {', '.join(missing_keys)}")
+        required_keys = {"id", "title", "status", "created_at"}
+        missing = required_keys - set(data.keys())
+        if missing:
+            raise ValueError(
+                f"data is missing required keys: {', '.join(sorted(missing))}"
+            )
 
-        validated: Dict[str, str] = {}
         for key in required_keys:
             value: Any = data[key]
             if not isinstance(value, str):
                 raise ValueError(f"{key} must be a string")
-            validated[key] = value
 
         return cls(
-            id=validated["id"],
-            title=validated["title"],
-            status=TaskStatus(validated["status"]),
-            created_at=validated["created_at"],
+            id=data["id"],
+            title=data["title"],
+            status=TaskStatus(data["status"]),
+            created_at=data["created_at"],
         )
 
 
