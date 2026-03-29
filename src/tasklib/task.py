@@ -6,7 +6,7 @@ the core public data model for tasklib.
 Security assumptions:
 - All external input to from_dict() is treated as untrusted and validated strictly.
 - Invalid status strings raise ValueError (fail closed).
-- Title must be a string; non-string titles are rejected.
+- Title must be a string.
 - No secrets or credentials are handled by this module.
 
 Failure behavior:
@@ -20,8 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict
-from uuid import uuid4
+from typing import Any
 
 
 class TaskStatus(str, Enum):
@@ -40,6 +39,8 @@ class TaskStatus(str, Enum):
 
 def _generate_id() -> str:
     """Generate a unique task identifier using uuid4 hex."""
+    from uuid import uuid4
+
     return uuid4().hex
 
 
@@ -58,9 +59,15 @@ class Task:
     Uses ``object.__setattr__`` in ``__post_init__`` to set auto-generated
     fields on the frozen instance.
 
-    Raises:
-        ValueError: If title is non-string, status is invalid,
-            or field types are incorrect.
+    Security assumptions:
+    - Serialized input is untrusted and must contain only expected string fields.
+    - Invalid or missing fields are rejected explicitly.
+    - This model performs no I/O and has no import-time side effects.
+
+    Failure behavior:
+    - Invalid title, id, status, or created_at values raise ValueError.
+    - Invalid mapping input to from_dict() raises ValueError.
+    - No validation failures are ignored or coerced silently.
     """
 
     title: str
@@ -69,63 +76,40 @@ class Task:
     created_at: str = field(default="")
 
     def __post_init__(self) -> None:
-        """Validate all fields and auto-populate id/created_at if missing.
-
-        Validation order:
-        1. title -- must be a string
-        2. id -- must be a string (may be empty for auto-generation)
-        3. created_at -- must be a string (may be empty for auto-generation)
-        4. status -- coerce from string if needed, reject invalid values
-        5. Auto-populate id if empty
-        6. Auto-populate created_at if empty
-        """
-        # Validate title is a string
+        """Validate fields and auto-populate generated values when absent."""
         if not isinstance(self.title, str):
             raise ValueError(
                 f"Task title must be a string, got {type(self.title).__name__}"
             )
 
-        # Validate id type
         if not isinstance(self.id, str):
-            raise ValueError(
-                f"Task id must be a string, got {type(self.id).__name__}"
-            )
+            raise ValueError(f"Task id must be a string, got {type(self.id).__name__}")
 
-        # Validate created_at type
         if not isinstance(self.created_at, str):
             raise ValueError(
-                f"Task created_at must be a string, got {type(self.created_at).__name__}"
+                "Task created_at must be a string, "
+                f"got {type(self.created_at).__name__}"
             )
 
-        # Coerce status from string if necessary, reject invalid values
         if isinstance(self.status, str) and not isinstance(self.status, TaskStatus):
             try:
                 object.__setattr__(self, "status", TaskStatus(self.status))
-            except ValueError:
-                raise ValueError(
-                    f"Invalid task status: {self.status!r}; "
-                    f"expected one of {[s.value for s in TaskStatus]}"
-                )
+            except ValueError as exc:
+                raise ValueError(f"Invalid task status: {self.status!r}") from exc
         elif not isinstance(self.status, TaskStatus):
             raise ValueError(
-                f"Task status must be a TaskStatus or valid status string, "
+                "Task status must be a TaskStatus or string, "
                 f"got {type(self.status).__name__}"
             )
 
-        # Auto-populate id if not provided
-        if not self.id:
+        if self.id == "":
             object.__setattr__(self, "id", _generate_id())
 
-        # Auto-populate created_at if not provided
-        if not self.created_at:
+        if self.created_at == "":
             object.__setattr__(self, "created_at", _generate_created_at())
 
-    def to_dict(self) -> Dict[str, str]:
-        """Serialize task to a plain dictionary with string values.
-
-        Returns:
-            Dict with keys: id, title, status, created_at -- all string values.
-        """
+    def to_dict(self) -> dict[str, str]:
+        """Serialize the task to a plain string-only dictionary."""
         return {
             "id": self.id,
             "title": self.title,
@@ -134,32 +118,63 @@ class Task:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Task:
-        """Deserialize a Task from a plain dictionary.
+    def from_dict(cls, data: dict[str, Any]) -> Task:
+        """Deserialize a task from a plain dictionary.
 
-        All input is treated as untrusted and validated through the
-        normal __post_init__ validation path.
+        Security assumptions:
+        - ``data`` is untrusted external input.
+        - Only the exact required keys are accepted.
+        - All values must be strings and status must map to a valid enum member.
 
-        Args:
-            data: Dictionary with keys id, title, status, created_at.
-
-        Returns:
-            A new Task instance.
-
-        Raises:
-            KeyError: If required key 'title' is missing.
-            ValueError: If any field value is invalid.
+        Failure behavior:
+        - Raises ValueError on non-dict input, missing keys, unexpected keys,
+          non-string values, or invalid status values.
         """
         if not isinstance(data, dict):
             raise ValueError(
-                f"Task.from_dict expects a dict, got {type(data).__name__}"
+                f"Task data must be a dict, got {type(data).__name__}"
             )
-        if "title" not in data:
-            raise KeyError("Task.from_dict requires 'title' key in data")
+
+        expected_keys = {"id", "title", "status", "created_at"}
+        actual_keys = set(data.keys())
+
+        missing_keys = expected_keys - actual_keys
+        if missing_keys:
+            raise ValueError(
+                f"Task data missing required keys: {sorted(missing_keys)}"
+            )
+
+        unexpected_keys = actual_keys - expected_keys
+        if unexpected_keys:
+            raise ValueError(
+                f"Task data contains unexpected keys: {sorted(unexpected_keys)}"
+            )
+
+        id_value = data["id"]
+        title_value = data["title"]
+        status_value = data["status"]
+        created_at_value = data["created_at"]
+
+        for field_name, field_value in (
+            ("id", id_value),
+            ("title", title_value),
+            ("status", status_value),
+            ("created_at", created_at_value),
+        ):
+            if not isinstance(field_value, str):
+                raise ValueError(
+                    f"Task field {field_name!r} must be a string, "
+                    f"got {type(field_value).__name__}"
+                )
+
+        try:
+            status = TaskStatus(status_value)
+        except ValueError as exc:
+            raise ValueError(f"Invalid task status: {status_value!r}") from exc
 
         return cls(
-            title=data["title"],
-            id=data.get("id", ""),
-            status=data.get("status", TaskStatus.PENDING),
-            created_at=data.get("created_at", ""),
+            id=id_value,
+            title=title_value,
+            status=status,
+            created_at=created_at_value,
         )
