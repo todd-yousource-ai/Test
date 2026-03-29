@@ -5,14 +5,15 @@ the core public data model for tasklib.
 
 Security assumptions:
 - All external input to from_dict() is treated as untrusted and validated strictly.
-- Invalid status strings raise ValueError (fail closed).
-- Title must be a string.
+- Invalid status strings raise ValueError and are never coerced.
+- Required fields must be present and typed correctly.
+- Unknown/extra keys in from_dict() are rejected explicitly.
 - No secrets or credentials are handled by this module.
 
 Failure behavior:
 - Construction with invalid types or values raises ValueError with context.
 - Attribute assignment on frozen Task raises FrozenInstanceError.
-- No silent failure paths -- every validation check surfaces an explicit error.
+- No silent failure paths; every validation check surfaces an explicit error.
 """
 
 from __future__ import annotations
@@ -27,10 +28,9 @@ from uuid import uuid4
 class TaskStatus(str, Enum):
     """Allowed lifecycle states for a task.
 
-    Extends both str and Enum so that enum members compare equal to their
-    string values and serialize naturally in dicts/JSON.
+    Extends both str and Enum so enum members serialize as plain strings.
 
-    Constructing with an invalid string raises ValueError.
+    Invalid values raise ValueError when constructing the enum.
     """
 
     PENDING = "pending"
@@ -40,87 +40,80 @@ class TaskStatus(str, Enum):
 
 def _generate_id() -> str:
     """Generate a unique task identifier using uuid4 hex."""
-    return uuid4().hex
+    result = uuid4().hex
+    assert result, "uuid4().hex produced empty string"
+    return result
 
 
 def _generate_created_at() -> str:
     """Generate an ISO-8601 UTC timestamp for task creation time."""
-    return datetime.now(timezone.utc).isoformat()
+    result = datetime.now(timezone.utc).isoformat()
+    assert result, "datetime isoformat() produced empty string"
+    return result
 
 
 @dataclass(frozen=True)
 class Task:
     """Immutable task record with deterministic serialization.
 
-    Can be constructed with only a ``title``; ``id``, ``status``, and
-    ``created_at`` are auto-populated when not explicitly provided.
+    A task may be constructed with only a title. The id and created_at fields
+    are auto-generated when omitted, and status defaults to TaskStatus.PENDING.
 
-    Uses ``object.__setattr__`` in ``__post_init__`` to set auto-generated
-    fields on the frozen instance.
+    The status field accepts both TaskStatus enum instances and raw status
+    strings (e.g. ``"pending"``), which are converted to the corresponding
+    enum member during validation.
 
     Security assumptions:
-    - Serialized input is untrusted and must contain only expected string fields.
-    - Invalid or missing fields are rejected explicitly.
-    - This model performs no I/O and has no import-time side effects.
+    - Serialized input is untrusted and validated strictly.
+    - Only the expected keys are accepted by from_dict().
+    - Invalid field values fail closed with explicit ValueError exceptions.
 
     Failure behavior:
     - Invalid title, id, status, or created_at values raise ValueError.
-    - Invalid mapping input to from_dict() raises ValueError.
-    - No validation failures are ignored or coerced silently.
+    - Invalid input to from_dict() raises ValueError with context.
+    - No validation errors are ignored or coerced silently.
     """
 
     title: str
-    id: str = field(default="")
+    id: str = field(default_factory=_generate_id)
     status: TaskStatus = TaskStatus.PENDING
-    created_at: str = field(default="")
+    created_at: str = field(default_factory=_generate_created_at)
 
     def __post_init__(self) -> None:
-        """Validate fields and auto-populate generated values when absent.
+        """Validate fields and populate generated defaults when absent.
 
-        Because the dataclass is frozen, ``object.__setattr__`` is used to
-        set auto-generated defaults for ``id`` and ``created_at`` when the
-        caller does not supply them (i.e., they are empty strings).
-
-        Raises:
-            ValueError: If title is not a non-empty string, if id is not a
-                string, if created_at is not a string, or if status is not
-                a valid TaskStatus member.
+        Raw status strings are accepted and converted to TaskStatus members.
+        Auto-generated id and created_at values are verified non-empty after
+        generation.
         """
         if not isinstance(self.title, str):
-            raise ValueError(
-                f"Task title must be a string, got {type(self.title).__name__}"
-            )
-
+            raise ValueError("Task title must be a string")
         if not self.title.strip():
-            raise ValueError("Task title must be a non-empty string")
+            raise ValueError("Task title must be non-empty")
 
         if not isinstance(self.id, str):
-            raise ValueError(f"Task id must be a string, got {type(self.id).__name__}")
-
+            raise ValueError("Task id must be a string")
         if not isinstance(self.created_at, str):
-            raise ValueError(
-                "Task created_at must be a string, "
-                f"got {type(self.created_at).__name__}"
-            )
+            raise ValueError("Task created_at must be a string")
 
+        # Accept raw status strings so callers need not import TaskStatus.
         if not isinstance(self.status, TaskStatus):
-            raise ValueError(
-                f"Task status must be a TaskStatus member, got {self.status!r}"
-            )
+            if isinstance(self.status, str):
+                try:
+                    object.__setattr__(self, "status", TaskStatus(self.status))
+                except ValueError as exc:
+                    raise ValueError(f"Invalid task status: {self.status!r}") from exc
+            else:
+                raise ValueError("Task status must be a TaskStatus or valid status string")
 
-        if self.id == "":
-            object.__setattr__(self, "id", _generate_id())
-
-        if self.created_at == "":
-            object.__setattr__(self, "created_at", _generate_created_at())
+        # Final guard: ensure both fields are populated.
+        if not self.id:
+            raise ValueError("Task id must be non-empty")
+        if not self.created_at:
+            raise ValueError("Task created_at must be non-empty")
 
     def to_dict(self) -> dict[str, str]:
-        """Serialize the task to a plain dictionary with string values.
-
-        Returns:
-            A dict with keys ``id``, ``title``, ``status``, ``created_at``,
-            all with string values suitable for JSON serialization.
-        """
+        """Serialize the task to a plain dictionary of strings."""
         return {
             "id": self.id,
             "title": self.title,
@@ -129,51 +122,40 @@ class Task:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Task:
-        """Reconstruct a Task from a dictionary.
+    def from_dict(cls, data: dict[str, str]) -> Task:
+        """Deserialize a task from a plain dictionary of strings.
 
-        All input is treated as untrusted and validated strictly. Missing
-        or invalid fields cause a ``ValueError`` to be raised -- no silent
-        coercion or defaults are applied for required fields.
-
-        Args:
-            data: A mapping containing ``id``, ``title``, ``status``, and
-                ``created_at`` keys with string values.
-
-        Returns:
-            A new Task instance populated from the provided data.
-
-        Raises:
-            ValueError: If any required key is missing, if any value has
-                an unexpected type, or if the status string is not a valid
-                TaskStatus member.
+        The input is treated as untrusted. Required keys must be present, all
+        values must be strings, and unknown/extra keys are rejected to prevent
+        unexpected data from passing silently.
         """
         if not isinstance(data, dict):
+            raise ValueError("Task data must be a dictionary")
+
+        expected_keys = {"id", "title", "status", "created_at"}
+        actual_keys = set(data.keys())
+
+        unknown_keys = actual_keys - expected_keys
+        if unknown_keys:
             raise ValueError(
-                f"Task.from_dict expects a dict, got {type(data).__name__}"
+                f"Task data contains unknown keys: {sorted(unknown_keys)}"
             )
 
-        required_keys = {"id", "title", "status", "created_at"}
-        missing = required_keys - set(data.keys())
-        if missing:
+        missing_keys = expected_keys - actual_keys
+        if missing_keys:
             raise ValueError(
-                f"Task.from_dict missing required key(s): {', '.join(sorted(missing))}"
+                f"Task data missing required keys: {sorted(missing_keys)}"
             )
 
-        for key in required_keys:
-            if not isinstance(data[key], str):
-                raise ValueError(
-                    f"Task.from_dict expected string for '{key}', "
-                    f"got {type(data[key]).__name__}"
-                )
+        for key in expected_keys:
+            value: Any = data[key]
+            if not isinstance(value, str):
+                raise ValueError(f"Task field {key!r} must be a string")
 
         try:
             status = TaskStatus(data["status"])
-        except ValueError:
-            raise ValueError(
-                f"Invalid task status: {data['status']!r}. "
-                f"Valid values: {[s.value for s in TaskStatus]}"
-            )
+        except ValueError as exc:
+            raise ValueError(f"Invalid task status: {data['status']!r}") from exc
 
         return cls(
             id=data["id"],
@@ -181,6 +163,3 @@ class Task:
             status=status,
             created_at=data["created_at"],
         )
-
-
-__all__ = ["Task", "TaskStatus"]
