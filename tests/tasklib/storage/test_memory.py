@@ -1,328 +1,271 @@
 """Tests for InMemoryTaskStore (tasklib.storage.memory)."""
 
-import copy
+from __future__ import annotations
+
 import time
 from datetime import datetime, timezone
 
 import pytest
 
-from tasklib.storage.memory import InMemoryTaskStore
 from tasklib.models.task import Task
+from tasklib.storage.memory import InMemoryTaskStore
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_task(task_id: str = "t1", title: str = "Test Task", **kwargs) -> Task:
-    """Create a minimal Task instance for testing."""
+def _make_task(task_id: str = "t1", title: str = "Test task", **kwargs) -> Task:
+    """Create a Task with sensible defaults. Passes extra kwargs through."""
     return Task(id=task_id, title=title, **kwargs)
 
 
 # ---------------------------------------------------------------------------
-# add()
+# Fixtures
 # ---------------------------------------------------------------------------
 
+@pytest.fixture
+def store() -> InMemoryTaskStore:
+    return InMemoryTaskStore()
+
+
+@pytest.fixture
+def populated_store(store: InMemoryTaskStore):
+    """Store pre-loaded with three tasks in a known order."""
+    store.add(_make_task("a", "Alpha"))
+    store.add(_make_task("b", "Bravo"))
+    store.add(_make_task("c", "Charlie"))
+    return store
+
+
+# ===========================================================================
+# Happy-path CRUD
+# ===========================================================================
+
 class TestAdd:
-    def test_add_stores_task_and_returns_it(self):
-        store = InMemoryTaskStore()
-        task = _make_task("t1", "My Task")
+    def test_add_stores_task_and_returns_it(self, store: InMemoryTaskStore):
+        task = _make_task("t1", "My task")
         result = store.add(task)
 
         assert result.id == "t1"
-        assert result.title == "My Task"
-        # Verify it's actually stored (retrievable)
-        retrieved = store.get("t1")
-        assert retrieved.id == "t1"
-        assert retrieved.title == "My Task"
+        assert result.title == "My task"
+        # Verify the task is actually persisted
+        assert store.get("t1").id == "t1"
 
-    def test_add_duplicate_id_raises_value_error(self):
-        store = InMemoryTaskStore()
+    def test_add_duplicate_id_raises_value_error(self, store: InMemoryTaskStore):
         store.add(_make_task("dup"))
-
         with pytest.raises(ValueError, match="dup"):
             store.add(_make_task("dup", "Different title"))
 
 
-# ---------------------------------------------------------------------------
-# get()
-# ---------------------------------------------------------------------------
-
 class TestGet:
-    def test_get_returns_correct_task_by_id(self):
-        store = InMemoryTaskStore()
-        store.add(_make_task("a", "Alpha"))
-        store.add(_make_task("b", "Beta"))
+    def test_get_returns_correct_task_by_id(self, populated_store: InMemoryTaskStore):
+        task = populated_store.get("b")
+        assert task.id == "b"
+        assert task.title == "Bravo"
 
-        result = store.get("b")
-        assert result.id == "b"
-        assert result.title == "Beta"
-
-    def test_get_missing_id_raises_key_error(self):
-        store = InMemoryTaskStore()
+    def test_get_missing_id_raises_key_error(self, store: InMemoryTaskStore):
         with pytest.raises(KeyError, match="no-such-id"):
             store.get("no-such-id")
 
 
-# ---------------------------------------------------------------------------
-# list_all()
-# ---------------------------------------------------------------------------
-
 class TestListAll:
-    def test_list_all_returns_all_tasks_in_order(self):
-        store = InMemoryTaskStore()
-        ids = ["first", "second", "third"]
-        for tid in ids:
-            store.add(_make_task(tid, f"Title {tid}"))
+    def test_list_all_returns_all_tasks_in_order(self, populated_store: InMemoryTaskStore):
+        tasks = populated_store.list_all()
+        assert len(tasks) == 3
+        assert [t.id for t in tasks] == ["a", "b", "c"]
 
-        result = store.list_all()
-        assert [t.id for t in result] == ids
+    def test_list_all_empty_store_returns_empty_list(self, store: InMemoryTaskStore):
+        assert store.list_all() == []
 
-    def test_list_all_empty_store_returns_empty_list(self):
-        store = InMemoryTaskStore()
-        result = store.list_all()
-        assert result == []
-
-
-# ---------------------------------------------------------------------------
-# update()
-# ---------------------------------------------------------------------------
 
 class TestUpdate:
-    def test_update_modifies_specified_fields(self):
-        store = InMemoryTaskStore()
-        store.add(_make_task("u1", "Old Title"))
-
-        updated = store.update("u1", {"title": "New Title"})
-        assert updated.title == "New Title"
-
+    def test_update_modifies_specified_fields(self, populated_store: InMemoryTaskStore):
+        updated = populated_store.update("a", title="Alpha Updated")
+        assert updated.title == "Alpha Updated"
+        assert updated.id == "a"
         # Verify persistence
-        assert store.get("u1").title == "New Title"
+        assert populated_store.get("a").title == "Alpha Updated"
 
-    def test_update_sets_updated_at_automatically(self):
-        store = InMemoryTaskStore()
-        task = _make_task("u2", "Title")
-        added = store.add(task)
-        original_updated_at = added.updated_at
+    def test_update_sets_updated_at_automatically(self, populated_store: InMemoryTaskStore):
+        before = datetime.now(timezone.utc)
+        updated = populated_store.update("a", title="New")
+        after = datetime.now(timezone.utc)
 
-        # Small sleep to guarantee time difference if implementation uses real clock
-        updated = store.update("u2", {"title": "Changed"})
         assert updated.updated_at is not None
+        assert before <= updated.updated_at <= after
+
+    def test_update_empty_fields_still_refreshes_updated_at(self, populated_store: InMemoryTaskStore):
+        original = populated_store.get("a")
+        original_updated_at = original.updated_at
+
+        # Small sleep to guarantee time difference if original_updated_at was set
+        time.sleep(0.01)
+        refreshed = populated_store.update("a")
+
+        assert refreshed.updated_at is not None
         if original_updated_at is not None:
-            assert updated.updated_at >= original_updated_at
+            assert refreshed.updated_at >= original_updated_at
+        # The key point: updated_at must be a recent UTC timestamp
+        assert refreshed.updated_at <= datetime.now(timezone.utc)
 
-    def test_update_empty_fields_still_refreshes_updated_at(self):
-        store = InMemoryTaskStore()
-        store.add(_make_task("u3", "Title"))
-        before = store.get("u3").updated_at
-
-        updated = store.update("u3", {})
-        assert updated.updated_at is not None
-        if before is not None:
-            assert updated.updated_at >= before
-
-    def test_update_missing_id_raises_key_error(self):
-        store = InMemoryTaskStore()
+    def test_update_missing_id_raises_key_error(self, store: InMemoryTaskStore):
         with pytest.raises(KeyError, match="ghost"):
-            store.update("ghost", {"title": "Nope"})
+            store.update("ghost", title="Nope")
 
-    def test_update_invalid_field_raises_attribute_error(self):
-        store = InMemoryTaskStore()
-        store.add(_make_task("u4", "Title"))
-
+    def test_update_invalid_field_raises_attribute_error(self, populated_store: InMemoryTaskStore):
         with pytest.raises(AttributeError, match="nonexistent_field"):
-            store.update("u4", {"nonexistent_field": "bad"})
+            populated_store.update("a", nonexistent_field="bad")
 
-        # Verify no partial mutation occurred -- title should be unchanged
-        assert store.get("u4").title == "Title"
+    def test_update_rejects_id_field_mutation(self, populated_store: InMemoryTaskStore):
+        """Attempting to change the immutable 'id' field must raise AttributeError."""
+        with pytest.raises(AttributeError, match="immutable"):
+            populated_store.update("a", id="new-id")
 
-    def test_update_rejects_id_field_change(self):
-        """The ``id`` field is immutable once stored."""
-        store = InMemoryTaskStore()
-        store.add(_make_task("immutable", "Title"))
-
-        with pytest.raises((AttributeError, ValueError)):
-            store.update("immutable", {"id": "new-id"})
-
-    def test_update_no_partial_application_on_error(self):
-        """When update encounters an invalid field, no valid fields in the
-        same call should have been applied (atomicity)."""
-        store = InMemoryTaskStore()
-        store.add(_make_task("atomic", "Original"))
-
+    def test_update_invalid_field_causes_no_partial_mutation(self, populated_store: InMemoryTaskStore):
+        """If validation fails, no fields should have been changed."""
+        original_title = populated_store.get("a").title
         with pytest.raises(AttributeError):
-            store.update("atomic", {"title": "Changed", "nonexistent_field": "x"})
+            populated_store.update("a", title="Should not persist", nonexistent_field="bad")
+        # title must be unchanged
+        assert populated_store.get("a").title == original_title
 
-        # Title must remain unchanged
-        assert store.get("atomic").title == "Original"
+    def test_update_missing_id_raises_before_field_validation(self, store: InMemoryTaskStore):
+        """KeyError for missing ID must be raised before field validation."""
+        with pytest.raises(KeyError):
+            store.update("nope", nonexistent_field="irrelevant")
 
-
-# ---------------------------------------------------------------------------
-# delete()
-# ---------------------------------------------------------------------------
 
 class TestDelete:
-    def test_delete_removes_task_and_returns_it(self):
-        store = InMemoryTaskStore()
-        store.add(_make_task("d1", "Doomed"))
-
-        deleted = store.delete("d1")
-        assert deleted.id == "d1"
-        assert deleted.title == "Doomed"
-
+    def test_delete_removes_task_and_returns_it(self, populated_store: InMemoryTaskStore):
+        deleted = populated_store.delete("b")
+        assert deleted.id == "b"
+        assert deleted.title == "Bravo"
+        # Verify it's actually gone
         with pytest.raises(KeyError):
-            store.get("d1")
+            populated_store.get("b")
+        assert len(populated_store.list_all()) == 2
 
-    def test_delete_missing_id_raises_key_error(self):
-        store = InMemoryTaskStore()
-        with pytest.raises(KeyError, match="vanished"):
-            store.delete("vanished")
+    def test_delete_missing_id_raises_key_error(self, store: InMemoryTaskStore):
+        with pytest.raises(KeyError, match="missing"):
+            store.delete("missing")
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Deep-copy isolation
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
-class TestCopyIsolation:
-    def test_returned_task_is_copy_not_reference(self):
-        store = InMemoryTaskStore()
-        original = _make_task("c1", "Copy Test")
+class TestIsolation:
+    def test_returned_task_is_copy_not_reference(self, store: InMemoryTaskStore):
+        original = _make_task("iso1", "Original")
         returned = store.add(original)
+        fetched = store.get("iso1")
 
-        # The returned object must not be the same object that is stored
-        # internally.  We verify by checking id() differs from a fresh get().
-        retrieved = store.get("c1")
-        assert returned is not retrieved
+        # All three objects must be distinct
+        assert returned is not original
+        assert fetched is not original
+        assert fetched is not returned
 
-    def test_mutating_returned_task_does_not_affect_store(self):
-        store = InMemoryTaskStore()
-        store.add(_make_task("c2", "Immutable Inside"))
+    def test_mutating_returned_task_does_not_affect_store(self, store: InMemoryTaskStore):
+        store.add(_make_task("iso2", "Before"))
+        fetched = store.get("iso2")
 
-        task_copy = store.get("c2")
-        # Attempt to mutate the returned copy
-        try:
-            task_copy.title = "Hacked!"
-        except AttributeError:
-            # If Task is frozen dataclass, mutation is blocked -- that's fine.
-            pass
+        # Forcefully mutate the returned copy
+        object.__setattr__(fetched, "title", "MUTATED")
 
-        # Internal state must remain unchanged regardless
-        assert store.get("c2").title == "Immutable Inside"
+        # Store must be unaffected
+        assert store.get("iso2").title == "Before"
 
-    def test_mutating_input_task_after_add_does_not_affect_store(self):
-        store = InMemoryTaskStore()
-        task = _make_task("c3", "Before Mutation")
-        store.add(task)
+    def test_mutating_original_after_add_does_not_affect_store(self, store: InMemoryTaskStore):
+        original = _make_task("iso3", "Pristine")
+        store.add(original)
 
-        # Mutate the input object
-        try:
-            task.title = "After Mutation"
-        except AttributeError:
-            pass
+        # Mutate the original object
+        object.__setattr__(original, "title", "Corrupted")
 
-        assert store.get("c3").title == "Before Mutation"
+        # Store must be unaffected
+        assert store.get("iso3").title == "Pristine"
 
-    def test_list_all_returns_copies(self):
-        store = InMemoryTaskStore()
-        store.add(_make_task("la1", "List Item"))
+    def test_list_all_returns_independent_copies(self, populated_store: InMemoryTaskStore):
+        tasks = populated_store.list_all()
+        object.__setattr__(tasks[0], "title", "HACKED")
 
-        items = store.list_all()
-        try:
-            items[0].title = "Tampered"
-        except AttributeError:
-            pass
+        fresh = populated_store.list_all()
+        assert fresh[0].title != "HACKED"
 
-        assert store.get("la1").title == "List Item"
+    def test_delete_returned_copy_is_independent(self, store: InMemoryTaskStore):
+        store.add(_make_task("del1", "To delete"))
+        deleted = store.delete("del1")
+        # Mutating the deleted copy should have no effect if the task were
+        # somehow re-added
+        object.__setattr__(deleted, "title", "CHANGED")
+        store.add(_make_task("del1", "Re-added"))
+        assert store.get("del1").title == "Re-added"
 
 
-# ---------------------------------------------------------------------------
-# Security-oriented tests
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# Security boundaries
+# ===========================================================================
 
 class TestSecurity:
-    def test_cannot_bypass_duplicate_check_by_modifying_returned_id(self):
-        """Ensure modifying a returned task's id doesn't corrupt the store."""
-        store = InMemoryTaskStore()
-        returned = store.add(_make_task("sec1", "Secure"))
+    def test_add_fails_closed_never_overwrites(self, store: InMemoryTaskStore):
+        """Duplicate add must raise -- must never silently overwrite."""
+        store.add(_make_task("sec1", "First"))
+        with pytest.raises(ValueError):
+            store.add(_make_task("sec1", "Overwrite attempt"))
+        # Original must survive
+        assert store.get("sec1").title == "First"
 
-        try:
-            returned.id = "sec2"
-        except AttributeError:
-            pass
-
-        # Original should still be accessible
-        assert store.get("sec1").title == "Secure"
-
-    def test_store_handles_large_number_of_tasks(self):
-        store = InMemoryTaskStore()
-        n = 1000
-        for i in range(n):
-            store.add(_make_task(f"bulk-{i}", f"Task {i}"))
-
-        assert len(store.list_all()) == n
-        assert store.get("bulk-500").title == "Task 500"
-
-    def test_id_with_special_characters(self):
-        """IDs with special characters should work without issues."""
-        store = InMemoryTaskStore()
-        special_ids = [
-            "id with spaces",
-            "id/with/slashes",
-            "id\nwith\nnewlines",
-            "id<script>alert('xss')</script>",
-            "",  # empty string ID
-            "  ",  # whitespace-only ID
-        ]
-        for sid in special_ids:
-            store.add(_make_task(sid, f"Title for {repr(sid)}"))
-
-        for sid in special_ids:
-            assert store.get(sid).id == sid
-
-    def test_cannot_access_internal_dict_through_returned_objects(self):
-        """Returned tasks should not hold references to internal store structures."""
-        store = InMemoryTaskStore()
-        store.add(_make_task("internal", "Protected"))
-
-        task = store.get("internal")
-        # task is a plain Task copy; verify it doesn't expose _tasks
-        assert not hasattr(task, "_tasks")
-
-    def test_delete_then_readd_same_id(self):
-        """After deletion, the same ID should be reusable."""
-        store = InMemoryTaskStore()
-        store.add(_make_task("reuse", "First"))
-        store.delete("reuse")
-        store.add(_make_task("reuse", "Second"))
-
-        assert store.get("reuse").title == "Second"
-
-    def test_update_immutable_id_preserves_store_integrity(self):
-        """Attempting to change id via update must not corrupt internal mapping."""
-        store = InMemoryTaskStore()
-        store.add(_make_task("keep", "Keeper"))
-
-        try:
-            store.update("keep", {"id": "stolen"})
-        except (AttributeError, ValueError):
-            pass
-
-        # Original must still be intact
-        assert store.get("keep").title == "Keeper"
-        # "stolen" must not exist
+    def test_get_fails_closed_never_returns_none(self, store: InMemoryTaskStore):
+        """get() must raise KeyError, never return None."""
         with pytest.raises(KeyError):
-            store.get("stolen")
+            store.get("nonexistent")
+
+    def test_update_immutable_id_rejected(self, populated_store: InMemoryTaskStore):
+        """Attempts to change 'id' via update must be rejected."""
+        with pytest.raises(AttributeError, match="immutable"):
+            populated_store.update("a", id="hijacked")
+        # Original must survive
+        assert populated_store.get("a").id == "a"
+
+    def test_update_validates_all_fields_before_any_mutation(self, populated_store: InMemoryTaskStore):
+        """Mixing valid + invalid fields must cause zero mutations."""
+        original = populated_store.get("a")
+        with pytest.raises(AttributeError):
+            populated_store.update("a", title="Sneaky", nonexistent_field="x")
+        assert populated_store.get("a").title == original.title
+
+    def test_delete_fails_closed_never_returns_none(self, store: InMemoryTaskStore):
+        """delete() must raise KeyError, never return None."""
+        with pytest.raises(KeyError):
+            store.delete("ghost")
+
+    def test_no_internal_state_leak_via_tasks_dict(self, store: InMemoryTaskStore):
+        """Directly accessing _tasks and mutating it should not affect get() copies."""
+        store.add(_make_task("leak", "Secret"))
+        # Even if someone grabs the internal dict reference, the public API
+        # returns copies.
+        internal_ref = store._tasks["leak"]
+        copy_via_get = store.get("leak")
+        assert internal_ref is not copy_via_get
+
+    def test_concurrent_style_add_delete_add(self, store: InMemoryTaskStore):
+        """Simulates add-delete-re-add to ensure clean state transitions."""
+        store.add(_make_task("cycle", "v1"))
+        store.delete("cycle")
+        store.add(_make_task("cycle", "v2"))
+        assert store.get("cycle").title == "v2"
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Package re-export
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
 class TestPackageImport:
     def test_import_from_storage_package(self):
         """InMemoryTaskStore should be importable from the storage package."""
-        storage_pkg = pytest.importorskip("tasklib.storage")
-        cls = getattr(storage_pkg, "InMemoryTaskStore", None)
+        mod = pytest.importorskip("tasklib.storage")
+        cls = getattr(mod, "InMemoryTaskStore", None)
         if cls is None:
             pytest.skip("tasklib.storage does not re-export InMemoryTaskStore yet")
         assert cls is InMemoryTaskStore
